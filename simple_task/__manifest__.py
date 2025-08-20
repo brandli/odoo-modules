@@ -6,6 +6,7 @@
     "category": "Productivity",
     "depends": ["base"],
     "data": [
+        "security/ir.model.access.csv",
         "views/task_views.xml",
     ],
     "installable": True,
