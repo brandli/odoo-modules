@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- List View -->
+    <record id="view_bpmn_process_tree" model="ir.ui.view">
+        <field name="name">bpmn.process.tree</field>
+        <field name="model">bpmn.process</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="name"/>
+                <field name="version"/>
+                <field name="description"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Form View -->
+    <record id="view_bpmn_process_form" model="ir.ui.view">
+        <field name="name">bpmn.process.form</field>
+        <field name="model">bpmn.process</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <field name="active" widget="boolean_button" 
+                               options="{'terminology': 'archive'}"/>
+                    </div>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" placeholder="Process Name"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="version"/>
+                        </group>
+                        <group>
+                            <field name="description"/>
+                        </group>
+                    </group>
+                    
+                    <group>
+                        <field name="description"/>
+                        <field name="bpmn_xml"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Search View -->
+    <record id="view_bpmn_process_search" model="ir.ui.view">
+        <field name="name">bpmn.process.search</field>
+        <field name="model">bpmn.process</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="description"/>
+                <field name="version"/>
+                <filter string="Active" name="active" domain="[('active', '=', True)]"/>
+                <filter string="Archived" name="inactive" domain="[('active', '=', False)]"/>
+                <group expand="0" string="Group By">
+                    <filter string="Version" name="version" context="{'group_by': 'version'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Action -->
+    <record id="action_bpmn_process" model="ir.actions.act_window">
+        <field name="name">BPMN Processes</field>
+        <field name="res_model">bpmn.process</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_bpmn_process_search"/>
+        <field name="context">{'search_default_active': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create your first BPMN process!
+            </p>
+            <p>
+                Use this module to create and view BPMN process diagrams.
+                You can create new processes or import existing BPMN XML definitions.
+            </p>
+        </field>
+    </record>
+
+    <!-- Menu -->
+    <menuitem id="menu_bpmn_root" 
+              name="BPMN" 
+              sequence="10"/>
+    
+    <menuitem id="menu_bpmn_processes" 
+              name="Processes" 
+              parent="menu_bpmn_root" 
+              action="action_bpmn_process" 
+              sequence="10"/>
+</odoo>

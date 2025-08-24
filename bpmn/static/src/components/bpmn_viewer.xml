@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="bpmn.BPMNViewer">
+        <div class="bpmn-viewer-container" style="width: 100%;">
+            <div t-ref="bpmnContainer" 
+                 class="bpmn-canvas" 
+                 t-att-style="'height: ' + height + '; border: 1px solid #dee2e6; background: #fafafa;'"/>
+        </div>
+    </t>
+
+    <t t-name="bpmn.BPMNWidget">
+        <div class="bpmn-field-widget" style="width: 100%;">
+            <div t-ref="bpmnContainer" 
+                 class="bpmn-canvas" 
+                 t-att-style="'height: ' + height + '; border: 1px solid #dee2e6; background: #fafafa;'"/>
+        </div>
+    </t>
+</templates>
