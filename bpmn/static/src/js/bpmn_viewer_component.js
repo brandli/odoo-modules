@@ -1,30 +1,68 @@
 /** @odoo-module **/
 
-import { Component, useRef, onMounted, onWillDestroy, useState } from "@odoo/owl";
+import { Component, useRef, onMounted, onWillDestroy, useState, xml } from "@odoo/owl";
 import { registry } from "@web/core/registry";
 
 /**
  * BPMN Viewer Component - Properly mounted OWL component with hooks
  */
 export class BPMNViewerComponent extends Component {
-    static template = "bpmn.BPMNViewerTemplate";
+    static template = xml`<div class="bpmn-viewer-widget">
+        <!-- Success message area (using instance variables for now) -->
+        <div t-if="comp.lastMessage and !comp.error" class="alert alert-success mb-3" role="alert">
+            <i class="fa fa-check"/> <t t-esc="comp.lastMessage"/>
+        </div>
+        
+        <!-- Error display area (using instance variables for now) -->
+        <div t-if="comp.error" class="alert alert-danger mb-3" role="alert">
+            <i class="fa fa-exclamation-triangle"/> <t t-esc="comp.error"/>
+        </div>
+        
+        <!-- Load button -->
+        <div class="mb-3">
+            <button type="button" 
+                    class="btn btn-primary" 
+                    t-on-click="onLoadDiagram"
+                    t-att-disabled="comp.loading">
+                <i t-if="comp.loading" class="fa fa-spinner fa-spin"/>
+                <i t-else="" class="fa fa-refresh"/>
+                <t t-if="comp.loading"> Loading...</t>
+                <t t-else=""> Load Diagram (OWL)</t>
+            </button>
+        </div>
+        
+        <!-- BPMN Container -->
+        <div id="bpmn-display-container-owl" 
+             class="bpmn-viewer-container" 
+             style="height: 500px; border: 1px solid #dee2e6; background: #fafafa;">
+            <div t-if="!comp.loading" 
+                 style="display: flex; align-items: center; justify-content: center; height: 100%; color: #6c757d;">
+                <div class="text-center">
+                    <i class="fa fa-sitemap fa-3x mb-3"/>
+                    <div>BPMN Diagram (OWL Component)</div>
+                    <small>Click "Load Diagram (OWL)" to render</small>
+                </div>
+            </div>
+            <div t-if="comp.loading" 
+                 style="display: flex; align-items: center; justify-content: center; height: 100%; color: #6c757d;">
+                <div class="text-center">
+                    <i class="fa fa-spinner fa-spin fa-3x mb-3"/>
+                    <div>Loading BPMN Diagram...</div>
+                </div>
+            </div>
+        </div>
+    </div>`;
     
     setup() {
-        // For now, let's simplify and just use the basic approach
-        // TODO: Add back adaptive hooks later when auto-mounting works
-        
-        console.log('BPMN Viewer Component: Setup called (simplified mode)');
-        
-        // Use instance variables for now (like the working loader)
+        // Use instance variables for state management
         this.error = null;
         this.loading = false;
         this.lastMessage = null;
-        this.bpmnContainerRef = null; // Will use getElementById as fallback
+        this.bpmnContainerRef = null;
         this.viewer = null;
         
-        // Make function available immediately (like the working loader)
+        // Make function available globally for compatibility
         window.loadBPMNDiagram = this.loadBPMNDiagram.bind(this);
-        console.log('BPMN Viewer Component: Global function set');
     }
     
     // Helper methods for state management
@@ -82,6 +120,12 @@ export class BPMNViewerComponent extends Component {
         }
     }
     
+    // Event handler for the load button (called from template)
+    onLoadDiagram() {
+        console.log('BPMN Viewer: onLoadDiagram called from template');
+        this.loadBPMNDiagram();
+    }
+    
     addGlobalButtonListener() {
         // Add event delegation for any Load Diagram buttons
         document.addEventListener('click', (event) => {
@@ -104,15 +148,17 @@ export class BPMNViewerComponent extends Component {
                 return;
             }
             
-            // Use the OWL ref for the container when available, fallback to getElementById
+            // Use the OWL component's own container when available, fallback to main container
             let container = null;
             
-            if (this.bpmnContainerRef && this.bpmnContainerRef.el) {
-                container = this.bpmnContainerRef.el;
-                console.log('BPMN Viewer: Using OWL ref for container');
+            // First try the OWL component's container
+            container = document.getElementById('bpmn-display-container-owl');
+            if (container) {
+                console.log('BPMN Viewer: Using OWL component container');
             } else {
+                // Fallback to the main container
                 container = document.getElementById('bpmn-display-container');
-                console.log('BPMN Viewer: Using getElementById fallback for container');
+                console.log('BPMN Viewer: Using fallback container');
             }
             
             if (!container) {
@@ -209,8 +255,6 @@ export class BPMNViewerComponent extends Component {
 // Register the component
 registry.category("bpmn_components").add("BPMNViewerComponent", BPMNViewerComponent);
 
-// Immediately create an instance to make the function available (like bpmn_loader does)
-// This ensures window.loadBPMNDiagram is set when the module loads
+// Register component and make global function available for compatibility
 const bpmnViewerComponent = new BPMNViewerComponent();
 bpmnViewerComponent.setup();
-console.log('BPMN Viewer Component: Module loaded and ready');

@@ -2,14 +2,14 @@
 <templates xml:space="preserve">
     <t t-name="bpmn.BPMNViewerTemplate">
         <div class="bpmn-viewer-widget">
-            <!-- Error display -->
-            <div t-if="state.error" class="alert alert-danger" role="alert">
-                <i class="fa fa-exclamation-triangle"/> <t t-esc="state.error"/>
+            <!-- Success message area (using instance variables for now) -->
+            <div t-if="comp.lastMessage and !comp.error" class="alert alert-success mb-3" role="alert">
+                <i class="fa fa-check"/> <t t-esc="comp.lastMessage"/>
             </div>
             
-            <!-- Success message -->
-            <div t-if="state.lastMessage and !state.error" class="alert alert-success" role="alert">
-                <i class="fa fa-check"/> <t t-esc="state.lastMessage"/>
+            <!-- Error display area (using instance variables for now) -->
+            <div t-if="comp.error" class="alert alert-danger mb-3" role="alert">
+                <i class="fa fa-exclamation-triangle"/> <t t-esc="comp.error"/>
             </div>
             
             <!-- Load button -->
@@ -17,27 +17,27 @@
                 <button type="button" 
                         class="btn btn-primary" 
                         t-on-click="onLoadDiagram"
-                        t-att-disabled="state.loading">
-                    <i t-if="state.loading" class="fa fa-spinner fa-spin"/>
+                        t-att-disabled="comp.loading">
+                    <i t-if="comp.loading" class="fa fa-spinner fa-spin"/>
                     <i t-else="" class="fa fa-refresh"/>
-                    <t t-if="state.loading"> Loading...</t>
-                    <t t-else=""> Load Diagram</t>
+                    <t t-if="comp.loading"> Loading...</t>
+                    <t t-else=""> Load Diagram (OWL)</t>
                 </button>
             </div>
             
             <!-- BPMN Container -->
-            <div t-ref="bpmnContainer" 
+            <div id="bpmn-display-container-owl" 
                  class="bpmn-viewer-container" 
                  style="height: 500px; border: 1px solid #dee2e6; background: #fafafa;">
-                <div t-if="!state.loading" 
+                <div t-if="!comp.loading" 
                      style="display: flex; align-items: center; justify-content: center; height: 100%; color: #6c757d;">
                     <div class="text-center">
                         <i class="fa fa-sitemap fa-3x mb-3"/>
-                        <div>BPMN Diagram</div>
-                        <small>Click "Load Diagram" to render the diagram from XML</small>
+                        <div>BPMN Diagram (OWL Component)</div>
+                        <small>Click "Load Diagram (OWL)" to render</small>
                     </div>
                 </div>
-                <div t-if="state.loading" 
+                <div t-if="comp.loading" 
                      style="display: flex; align-items: center; justify-content: center; height: 100%; color: #6c757d;">
                     <div class="text-center">
                         <i class="fa fa-spinner fa-spin fa-3x mb-3"/>

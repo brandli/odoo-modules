@@ -28,9 +28,8 @@ This is a foundational implementation that can be extended with editing capabili
             'bpmn/static/src/js/bpmn_loader.js',
             'bpmn/static/src/js/bpmn_viewer_component.js',
             'bpmn/static/src/js/bpmn_viewer_widget.js',
-            # 'bpmn/static/src/js/bpmn_auto_mount.js',  # Temporarily disabled
+            'bpmn/static/src/js/bpmn_auto_mount.js',
             'bpmn/static/src/xml/bpmn_loader_template.xml',
-            'bpmn/static/src/xml/bpmn_viewer_template.xml',
             'bpmn/static/src/xml/bpmn_page_template.xml',
         ],
     },

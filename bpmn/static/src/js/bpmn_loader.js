@@ -7,21 +7,18 @@ import { registry } from "@web/core/registry";
  * BPMN Loader - Simple BPMN diagram rendering for Odoo
  * Converted to OWL component while preserving all existing functionality
  */
-console.log('BPMN Loader: Loading...');
 
 export class BPMNLoader extends Component {
     static template = "bpmn.BPMNLoaderTemplate";
     
     setup() {
-        // Initialize state as regular instance variables (no hooks needed)
+        // Initialize state as regular instance variables
         this.error = null;
         this.loading = false;
         this.lastMessage = null;
         
-        // Note: OWL hooks like useState, useRef would go here when component is properly mounted
-        // For now, make the function available immediately for backward compatibility
+        // Make function available globally for backward compatibility
         window.loadBPMNDiagram = this.loadBPMNDiagram.bind(this);
-        console.log('BPMN Loader: Ready');
     }
     
     // Helper methods for better error handling
@@ -148,6 +145,6 @@ registry.category("bpmn_components").add("BPMNLoader", BPMNLoader);
 
 // Immediately create an instance to make the function available
 // This ensures window.loadBPMNDiagram is set when the module loads
+// Initialize loader and make global function available
 const bpmnLoader = new BPMNLoader();
 bpmnLoader.setup();
-console.log('BPMN Loader: Module loaded and ready');
