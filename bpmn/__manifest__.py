@@ -26,6 +26,7 @@ This is a foundational implementation that can be extended with editing capabili
             'bpmn/static/lib/bpmn-js/dist/bpmn-viewer.development.js',
             'bpmn/static/lib/bpmn-js/dist/bpmn-js.css',
             'bpmn/static/src/js/bpmn_loader.js',
+            'bpmn/static/src/xml/bpmn_loader_template.xml',
         ],
     },
     'installable': True,

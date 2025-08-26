@@ -1,13 +1,24 @@
+/** @odoo-module **/
+
+import { Component } from "@odoo/owl";
+import { registry } from "@web/core/registry";
+
 /**
  * BPMN Loader - Simple BPMN diagram rendering for Odoo
+ * Converted to OWL component while preserving all existing functionality
  */
 console.log('BPMN Loader: Loading...');
 
-(function() {
-    'use strict';
+export class BPMNLoader extends Component {
+    static template = "bpmn.BPMNLoaderTemplate";
     
-    // Make function globally available
-    window.loadBPMNDiagram = function(event) {
+    setup() {
+        // Make the function available immediately in setup
+        window.loadBPMNDiagram = this.loadBPMNDiagram.bind(this);
+        console.log('BPMN Loader: Ready');
+    }
+    
+    loadBPMNDiagram(event) {
         console.log('BPMN Loader: Loading diagram...');
         
         try {
@@ -99,8 +110,14 @@ console.log('BPMN Loader: Loading...');
             console.error('BPMN Loader error:', err);
             alert('Error: ' + err.message);
         }
-    };
-    
-    console.log('BPMN Loader: Ready');
-    
-})();
+    }
+}
+
+// Register the component for backward compatibility
+registry.category("bpmn_components").add("BPMNLoader", BPMNLoader);
+
+// Immediately create an instance to make the function available
+// This ensures window.loadBPMNDiagram is set when the module loads
+const bpmnLoader = new BPMNLoader();
+bpmnLoader.setup();
+console.log('BPMN Loader: Module loaded and ready');
