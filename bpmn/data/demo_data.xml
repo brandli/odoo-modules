@@ -5,7 +5,6 @@
         <record id="bpmn_process_order_fulfillment" model="bpmn.process">
             <field name="name">Order Fulfillment Process</field>
             <field name="description">Complete order fulfillment workflow from order receipt to shipment</field>
-            <field name="version">1.0</field>
             <field name="active">True</field>
             <field name="bpmn_xml">&lt;?xml version="1.0" encoding="UTF-8"?&gt;
 &lt;bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
@@ -18,208 +17,157 @@
     &lt;bpmn:startEvent id="StartEvent_OrderReceived" name="Order Received"&gt;
       &lt;bpmn:outgoing&gt;Flow_1&lt;/bpmn:outgoing&gt;
     &lt;/bpmn:startEvent&gt;
-    
     &lt;bpmn:task id="Task_ValidateOrder" name="Validate Order"&gt;
       &lt;bpmn:incoming&gt;Flow_1&lt;/bpmn:incoming&gt;
       &lt;bpmn:outgoing&gt;Flow_2&lt;/bpmn:outgoing&gt;
     &lt;/bpmn:task&gt;
-    
-    &lt;bpmn:exclusiveGateway id="Gateway_OrderValid" name="Order Valid?"&gt;
-      &lt;bpmn:incoming&gt;Flow_2&lt;/bpmn:incoming&gt;
-      &lt;bpmn:outgoing&gt;Flow_Valid&lt;/bpmn:outgoing&gt;
-      &lt;bpmn:outgoing&gt;Flow_Invalid&lt;/bpmn:outgoing&gt;
-    &lt;/bpmn:exclusiveGateway&gt;
-    
     &lt;bpmn:task id="Task_ProcessPayment" name="Process Payment"&gt;
-      &lt;bpmn:incoming&gt;Flow_Valid&lt;/bpmn:incoming&gt;
+      &lt;bpmn:incoming&gt;Flow_2&lt;/bpmn:incoming&gt;
       &lt;bpmn:outgoing&gt;Flow_3&lt;/bpmn:outgoing&gt;
     &lt;/bpmn:task&gt;
-    
     &lt;bpmn:task id="Task_PrepareShipment" name="Prepare Shipment"&gt;
       &lt;bpmn:incoming&gt;Flow_3&lt;/bpmn:incoming&gt;
       &lt;bpmn:outgoing&gt;Flow_4&lt;/bpmn:outgoing&gt;
     &lt;/bpmn:task&gt;
-    
-    &lt;bpmn:task id="Task_ShipOrder" name="Ship Order"&gt;
-      &lt;bpmn:incoming&gt;Flow_4&lt;/bpmn:incoming&gt;
-      &lt;bpmn:outgoing&gt;Flow_5&lt;/bpmn:outgoing&gt;
-    &lt;/bpmn:task&gt;
-    
-    &lt;bpmn:task id="Task_RejectOrder" name="Reject Order"&gt;
-      &lt;bpmn:incoming&gt;Flow_Invalid&lt;/bpmn:incoming&gt;
-      &lt;bpmn:outgoing&gt;Flow_6&lt;/bpmn:outgoing&gt;
-    &lt;/bpmn:task&gt;
-    
     &lt;bpmn:endEvent id="EndEvent_OrderShipped" name="Order Shipped"&gt;
-      &lt;bpmn:incoming&gt;Flow_5&lt;/bpmn:incoming&gt;
+      &lt;bpmn:incoming&gt;Flow_4&lt;/bpmn:incoming&gt;
     &lt;/bpmn:endEvent&gt;
-    
-    &lt;bpmn:endEvent id="EndEvent_OrderRejected" name="Order Rejected"&gt;
-      &lt;bpmn:incoming&gt;Flow_6&lt;/bpmn:incoming&gt;
-    &lt;/bpmn:endEvent&gt;
-    
-    &lt;bpmn:sequenceFlow id="Flow_1" sourceRef="StartEvent_OrderReceived" targetRef="Task_ValidateOrder" /&gt;
-    &lt;bpmn:sequenceFlow id="Flow_2" sourceRef="Task_ValidateOrder" targetRef="Gateway_OrderValid" /&gt;
-    &lt;bpmn:sequenceFlow id="Flow_Valid" name="Yes" sourceRef="Gateway_OrderValid" targetRef="Task_ProcessPayment" /&gt;
-    &lt;bpmn:sequenceFlow id="Flow_Invalid" name="No" sourceRef="Gateway_OrderValid" targetRef="Task_RejectOrder" /&gt;
-    &lt;bpmn:sequenceFlow id="Flow_3" sourceRef="Task_ProcessPayment" targetRef="Task_PrepareShipment" /&gt;
-    &lt;bpmn:sequenceFlow id="Flow_4" sourceRef="Task_PrepareShipment" targetRef="Task_ShipOrder" /&gt;
-    &lt;bpmn:sequenceFlow id="Flow_5" sourceRef="Task_ShipOrder" targetRef="EndEvent_OrderShipped" /&gt;
-    &lt;bpmn:sequenceFlow id="Flow_6" sourceRef="Task_RejectOrder" targetRef="EndEvent_OrderRejected" /&gt;
+    &lt;bpmn:sequenceFlow id="Flow_1" sourceRef="StartEvent_OrderReceived" targetRef="Task_ValidateOrder"/&gt;
+    &lt;bpmn:sequenceFlow id="Flow_2" sourceRef="Task_ValidateOrder" targetRef="Task_ProcessPayment"/&gt;
+    &lt;bpmn:sequenceFlow id="Flow_3" sourceRef="Task_ProcessPayment" targetRef="Task_PrepareShipment"/&gt;
+    &lt;bpmn:sequenceFlow id="Flow_4" sourceRef="Task_PrepareShipment" targetRef="EndEvent_OrderShipped"/&gt;
   &lt;/bpmn:process&gt;
-  
-  &lt;bpmndi:BPMNDiagram id="BPMNDiagram_OrderFulfillment"&gt;
-    &lt;bpmndi:BPMNPlane id="BPMNPlane_OrderFulfillment" bpmnElement="OrderFulfillmentProcess"&gt;
-      &lt;bpmndi:BPMNShape id="StartEvent_OrderReceived_di" bpmnElement="StartEvent_OrderReceived"&gt;
-        &lt;dc:Bounds x="152" y="102" width="36" height="36" /&gt;
+  &lt;bpmndi:BPMNDiagram id="BPMNDiagram_1"&gt;
+    &lt;bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="OrderFulfillmentProcess"&gt;
+      &lt;bpmndi:BPMNShape id="_BPMNShape_StartEvent_2" bpmnElement="StartEvent_OrderReceived"&gt;
+        &lt;dc:Bounds x="179" y="99" width="36" height="36"/&gt;
         &lt;bpmndi:BPMNLabel&gt;
-          &lt;dc:Bounds x="132" y="145" width="76" height="14" /&gt;
+          &lt;dc:Bounds x="162" y="142" width="71" height="14"/&gt;
         &lt;/bpmndi:BPMNLabel&gt;
       &lt;/bpmndi:BPMNShape&gt;
-      
       &lt;bpmndi:BPMNShape id="Task_ValidateOrder_di" bpmnElement="Task_ValidateOrder"&gt;
-        &lt;dc:Bounds x="240" y="80" width="100" height="80" /&gt;
+        &lt;dc:Bounds x="270" y="77" width="100" height="80"/&gt;
       &lt;/bpmndi:BPMNShape&gt;
-      
-      &lt;bpmndi:BPMNShape id="Gateway_OrderValid_di" bpmnElement="Gateway_OrderValid" isMarkerVisible="true"&gt;
-        &lt;dc:Bounds x="395" y="95" width="50" height="50" /&gt;
-        &lt;bpmndi:BPMNLabel&gt;
-          &lt;dc:Bounds x="388" y="71" width="63" height="14" /&gt;
-        &lt;/bpmndi:BPMNLabel&gt;
-      &lt;/bpmndi:BPMNShape&gt;
-      
       &lt;bpmndi:BPMNShape id="Task_ProcessPayment_di" bpmnElement="Task_ProcessPayment"&gt;
-        &lt;dc:Bounds x="500" y="80" width="100" height="80" /&gt;
+        &lt;dc:Bounds x="420" y="77" width="100" height="80"/&gt;
       &lt;/bpmndi:BPMNShape&gt;
-      
       &lt;bpmndi:BPMNShape id="Task_PrepareShipment_di" bpmnElement="Task_PrepareShipment"&gt;
-        &lt;dc:Bounds x="650" y="80" width="100" height="80" /&gt;
+        &lt;dc:Bounds x="570" y="77" width="100" height="80"/&gt;
       &lt;/bpmndi:BPMNShape&gt;
-      
-      &lt;bpmndi:BPMNShape id="Task_ShipOrder_di" bpmnElement="Task_ShipOrder"&gt;
-        &lt;dc:Bounds x="800" y="80" width="100" height="80" /&gt;
-      &lt;/bpmndi:BPMNShape&gt;
-      
-      &lt;bpmndi:BPMNShape id="Task_RejectOrder_di" bpmnElement="Task_RejectOrder"&gt;
-        &lt;dc:Bounds x="500" y="200" width="100" height="80" /&gt;
-      &lt;/bpmndi:BPMNShape&gt;
-      
       &lt;bpmndi:BPMNShape id="EndEvent_OrderShipped_di" bpmnElement="EndEvent_OrderShipped"&gt;
-        &lt;dc:Bounds x="952" y="102" width="36" height="36" /&gt;
+        &lt;dc:Bounds x="722" y="99" width="36" height="36"/&gt;
         &lt;bpmndi:BPMNLabel&gt;
-          &lt;dc:Bounds x="934" y="145" width="72" height="14" /&gt;
+          &lt;dc:Bounds x="705" y="142" width="71" height="14"/&gt;
         &lt;/bpmndi:BPMNLabel&gt;
       &lt;/bpmndi:BPMNShape&gt;
-      
-      &lt;bpmndi:BPMNShape id="EndEvent_OrderRejected_di" bpmnElement="EndEvent_OrderRejected"&gt;
-        &lt;dc:Bounds x="652" y="222" width="36" height="36" /&gt;
-        &lt;bpmndi:BPMNLabel&gt;
-          &lt;dc:Bounds x="632" y="265" width="77" height="14" /&gt;
-        &lt;/bpmndi:BPMNLabel&gt;
-      &lt;/bpmndi:BPMNShape&gt;
-      
       &lt;bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1"&gt;
-        &lt;di:waypoint x="188" y="120" /&gt;
-        &lt;di:waypoint x="240" y="120" /&gt;
+        &lt;di:waypoint x="215" y="117"/&gt;
+        &lt;di:waypoint x="270" y="117"/&gt;
       &lt;/bpmndi:BPMNEdge&gt;
-      
       &lt;bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2"&gt;
-        &lt;di:waypoint x="340" y="120" /&gt;
-        &lt;di:waypoint x="395" y="120" /&gt;
+        &lt;di:waypoint x="370" y="117"/&gt;
+        &lt;di:waypoint x="420" y="117"/&gt;
       &lt;/bpmndi:BPMNEdge&gt;
-      
-      &lt;bpmndi:BPMNEdge id="Flow_Valid_di" bpmnElement="Flow_Valid"&gt;
-        &lt;di:waypoint x="445" y="120" /&gt;
-        &lt;di:waypoint x="500" y="120" /&gt;
-        &lt;bpmndi:BPMNLabel&gt;
-          &lt;dc:Bounds x="464" y="102" width="18" height="14" /&gt;
-        &lt;/bpmndi:BPMNLabel&gt;
-      &lt;/bpmndi:BPMNEdge&gt;
-      
-      &lt;bpmndi:BPMNEdge id="Flow_Invalid_di" bpmnElement="Flow_Invalid"&gt;
-        &lt;di:waypoint x="420" y="145" /&gt;
-        &lt;di:waypoint x="420" y="240" /&gt;
-        &lt;di:waypoint x="500" y="240" /&gt;
-        &lt;bpmndi:BPMNLabel&gt;
-          &lt;dc:Bounds x="429" y="190" width="15" height="14" /&gt;
-        &lt;/bpmndi:BPMNLabel&gt;
-      &lt;/bpmndi:BPMNEdge&gt;
-      
       &lt;bpmndi:BPMNEdge id="Flow_3_di" bpmnElement="Flow_3"&gt;
-        &lt;di:waypoint x="600" y="120" /&gt;
-        &lt;di:waypoint x="650" y="120" /&gt;
+        &lt;di:waypoint x="520" y="117"/&gt;
+        &lt;di:waypoint x="570" y="117"/&gt;
       &lt;/bpmndi:BPMNEdge&gt;
-      
       &lt;bpmndi:BPMNEdge id="Flow_4_di" bpmnElement="Flow_4"&gt;
-        &lt;di:waypoint x="750" y="120" /&gt;
-        &lt;di:waypoint x="800" y="120" /&gt;
-      &lt;/bpmndi:BPMNEdge&gt;
-      
-      &lt;bpmndi:BPMNEdge id="Flow_5_di" bpmnElement="Flow_5"&gt;
-        &lt;di:waypoint x="900" y="120" /&gt;
-        &lt;di:waypoint x="952" y="120" /&gt;
-      &lt;/bpmndi:BPMNEdge&gt;
-      
-      &lt;bpmndi:BPMNEdge id="Flow_6_di" bpmnElement="Flow_6"&gt;
-        &lt;di:waypoint x="600" y="240" /&gt;
-        &lt;di:waypoint x="652" y="240" /&gt;
+        &lt;di:waypoint x="670" y="117"/&gt;
+        &lt;di:waypoint x="722" y="117"/&gt;
       &lt;/bpmndi:BPMNEdge&gt;
     &lt;/bpmndi:BPMNPlane&gt;
   &lt;/bpmndi:BPMNDiagram&gt;
 &lt;/bpmn:definitions&gt;</field>
         </record>
 
-        <!-- Simple Test Process -->
-        <record id="bpmn_process_simple_approval" model="bpmn.process">
+        <!-- Simple Approval Process for Testing -->
+        <record id="bpmn_process_approval" model="bpmn.process">
             <field name="name">Simple Approval Process</field>
             <field name="description">Basic approval workflow for testing</field>
-            <field name="version">1.0</field>
             <field name="active">True</field>
             <field name="bpmn_xml">&lt;?xml version="1.0" encoding="UTF-8"?&gt;
 &lt;bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
                   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
                   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
-                  id="Definitions_SimpleApproval"
+                  id="Definitions_Approval"
                   targetNamespace="http://bpmn.io/schema/bpmn"&gt;
-  &lt;bpmn:process id="SimpleApprovalProcess" isExecutable="false"&gt;
-    &lt;bpmn:startEvent id="StartEvent_1" name="Start"&gt;
+  &lt;bpmn:process id="ApprovalProcess" isExecutable="false" name="Simple Approval Process"&gt;
+    &lt;bpmn:startEvent id="StartEvent_RequestSubmitted" name="Request Submitted"&gt;
       &lt;bpmn:outgoing&gt;Flow_1&lt;/bpmn:outgoing&gt;
     &lt;/bpmn:startEvent&gt;
     &lt;bpmn:task id="Task_Review" name="Review Request"&gt;
       &lt;bpmn:incoming&gt;Flow_1&lt;/bpmn:incoming&gt;
       &lt;bpmn:outgoing&gt;Flow_2&lt;/bpmn:outgoing&gt;
     &lt;/bpmn:task&gt;
-    &lt;bpmn:endEvent id="EndEvent_1" name="End"&gt;
+    &lt;bpmn:exclusiveGateway id="Gateway_Decision" name="Approved?"&gt;
       &lt;bpmn:incoming&gt;Flow_2&lt;/bpmn:incoming&gt;
+      &lt;bpmn:outgoing&gt;Flow_3&lt;/bpmn:outgoing&gt;
+      &lt;bpmn:outgoing&gt;Flow_4&lt;/bpmn:outgoing&gt;
+    &lt;/bpmn:exclusiveGateway&gt;
+    &lt;bpmn:endEvent id="EndEvent_Approved" name="Approved"&gt;
+      &lt;bpmn:incoming&gt;Flow_3&lt;/bpmn:incoming&gt;
     &lt;/bpmn:endEvent&gt;
-    &lt;bpmn:sequenceFlow id="Flow_1" sourceRef="StartEvent_1" targetRef="Task_Review" /&gt;
-    &lt;bpmn:sequenceFlow id="Flow_2" sourceRef="Task_Review" targetRef="EndEvent_1" /&gt;
+    &lt;bpmn:endEvent id="EndEvent_Rejected" name="Rejected"&gt;
+      &lt;bpmn:incoming&gt;Flow_4&lt;/bpmn:incoming&gt;
+    &lt;/bpmn:endEvent&gt;
+    &lt;bpmn:sequenceFlow id="Flow_1" sourceRef="StartEvent_RequestSubmitted" targetRef="Task_Review"/&gt;
+    &lt;bpmn:sequenceFlow id="Flow_2" sourceRef="Task_Review" targetRef="Gateway_Decision"/&gt;
+    &lt;bpmn:sequenceFlow id="Flow_3" name="Yes" sourceRef="Gateway_Decision" targetRef="EndEvent_Approved"/&gt;
+    &lt;bpmn:sequenceFlow id="Flow_4" name="No" sourceRef="Gateway_Decision" targetRef="EndEvent_Rejected"/&gt;
   &lt;/bpmn:process&gt;
   &lt;bpmndi:BPMNDiagram id="BPMNDiagram_1"&gt;
-    &lt;bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="SimpleApprovalProcess"&gt;
-      &lt;bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1"&gt;
-        &lt;dc:Bounds x="100" y="100" width="36" height="36" /&gt;
+    &lt;bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="ApprovalProcess"&gt;
+      &lt;bpmndi:BPMNShape id="_BPMNShape_StartEvent_2" bpmnElement="StartEvent_RequestSubmitted"&gt;
+        &lt;dc:Bounds x="179" y="99" width="36" height="36"/&gt;
         &lt;bpmndi:BPMNLabel&gt;
-          &lt;dc:Bounds x="108" y="143" width="24" height="14" /&gt;
+          &lt;dc:Bounds x="152" y="142" width="90" height="14"/&gt;
         &lt;/bpmndi:BPMNLabel&gt;
       &lt;/bpmndi:BPMNShape&gt;
       &lt;bpmndi:BPMNShape id="Task_Review_di" bpmnElement="Task_Review"&gt;
-        &lt;dc:Bounds x="200" y="78" width="100" height="80" /&gt;
+        &lt;dc:Bounds x="270" y="77" width="100" height="80"/&gt;
       &lt;/bpmndi:BPMNShape&gt;
-      &lt;bpmndi:BPMNShape id="EndEvent_1_di" bpmnElement="EndEvent_1"&gt;
-        &lt;dc:Bounds x="370" y="100" width="36" height="36" /&gt;
+      &lt;bpmndi:BPMNShape id="Gateway_Decision_di" bpmnElement="Gateway_Decision" isMarkerVisible="true"&gt;
+        &lt;dc:Bounds x="425" y="92" width="50" height="50"/&gt;
         &lt;bpmndi:BPMNLabel&gt;
-          &lt;dc:Bounds x="381" y="143" width="20" height="14" /&gt;
+          &lt;dc:Bounds x="424" y="68" width="52" height="14"/&gt;
+        &lt;/bpmndi:BPMNLabel&gt;
+      &lt;/bpmndi:BPMNShape&gt;
+      &lt;bpmndi:BPMNShape id="EndEvent_Approved_di" bpmnElement="EndEvent_Approved"&gt;
+        &lt;dc:Bounds x="532" y="99" width="36" height="36"/&gt;
+        &lt;bpmndi:BPMNLabel&gt;
+          &lt;dc:Bounds x="524" y="142" width="52" height="14"/&gt;
+        &lt;/bpmndi:BPMNLabel&gt;
+      &lt;/bpmndi:BPMNShape&gt;
+      &lt;bpmndi:BPMNShape id="EndEvent_Rejected_di" bpmnElement="EndEvent_Rejected"&gt;
+        &lt;dc:Bounds x="532" y="192" width="36" height="36"/&gt;
+        &lt;bpmndi:BPMNLabel&gt;
+          &lt;dc:Bounds x="527" y="235" width="46" height="14"/&gt;
         &lt;/bpmndi:BPMNLabel&gt;
       &lt;/bpmndi:BPMNShape&gt;
       &lt;bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1"&gt;
-        &lt;di:waypoint x="136" y="118" /&gt;
-        &lt;di:waypoint x="200" y="118" /&gt;
+        &lt;di:waypoint x="215" y="117"/&gt;
+        &lt;di:waypoint x="270" y="117"/&gt;
       &lt;/bpmndi:BPMNEdge&gt;
       &lt;bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2"&gt;
-        &lt;di:waypoint x="300" y="118" /&gt;
-        &lt;di:waypoint x="370" y="118" /&gt;
+        &lt;di:waypoint x="370" y="117"/&gt;
+        &lt;di:waypoint x="425" y="117"/&gt;
+      &lt;/bpmndi:BPMNEdge&gt;
+      &lt;bpmndi:BPMNEdge id="Flow_3_di" bpmnElement="Flow_3"&gt;
+        &lt;di:waypoint x="475" y="117"/&gt;
+        &lt;di:waypoint x="532" y="117"/&gt;
+        &lt;bpmndi:BPMNLabel&gt;
+          &lt;dc:Bounds x="495" y="99" width="18" height="14"/&gt;
+        &lt;/bpmndi:BPMNLabel&gt;
+      &lt;/bpmndi:BPMNEdge&gt;
+      &lt;bpmndi:BPMNEdge id="Flow_4_di" bpmnElement="Flow_4"&gt;
+        &lt;di:waypoint x="450" y="142"/&gt;
+        &lt;di:waypoint x="450" y="210"/&gt;
+        &lt;di:waypoint x="532" y="210"/&gt;
+        &lt;bpmndi:BPMNLabel&gt;
+          &lt;dc:Bounds x="459" y="173" width="15" height="14"/&gt;
+        &lt;/bpmndi:BPMNLabel&gt;
       &lt;/bpmndi:BPMNEdge&gt;
     &lt;/bpmndi:BPMNPlane&gt;
   &lt;/bpmndi:BPMNDiagram&gt;

@@ -7,7 +7,6 @@
         <field name="arch" type="xml">
             <list>
                 <field name="name"/>
-                <field name="version"/>
                 <field name="description"/>
                 <field name="active"/>
             </list>
@@ -28,7 +27,6 @@
                     </div>
                     <group>
                         <group>
-                            <field name="version"/>
                             <field name="description"/>
                         </group>
                         <group>
@@ -40,39 +38,22 @@
                         <page string="BPMN Diagram" name="diagram">
                             <div style="margin: 10px 0;">
                                 <div class="alert alert-info">
-                                    <strong>BPMN Diagram:</strong> The diagram is now displayed on the XML Source tab for easier editing and viewing.
+                                    <strong>BPMN XML Source:</strong> Edit the BPMN process definition below, then load the diagram.
                                 </div>
-                                <div class="text-center" style="margin: 50px; color: #6c757d;">
-                                    <i class="fa fa-arrow-right fa-2x"/>
-                                    <div style="margin-top: 10px;">
-                                        <strong>Go to the "XML Source" tab to view and edit the BPMN diagram</strong>
-                                    </div>
-                                </div>
-                            </div>
-                        </page>
-                        <page string="XML Source" name="xml_source">
-                            <div style="margin: 10px 0;">
-                                <div class="alert alert-warning">
-                                    <strong>BPMN XML Source:</strong> Edit the BPMN process definition below. Make sure it's valid BPMN 2.0 XML.
-                                </div>
-                                <field name="bpmn_xml" widget="text" nolabel="1" style="min-height: 400px; font-family: monospace;"/>
+                                <field name="bpmn_xml" widget="text" nolabel="1" style="min-height: 300px; font-family: monospace;"/>
                                 
-                                <!-- BPMN Diagram Display -->
-                                <div style="margin-top: 20px;">
-                                    <div class="alert alert-info">
-                                        <strong>BPMN Diagram Preview:</strong> Visual representation of the XML above.
+                                <div style="margin: 20px 0;">
+                                    <div class="btn btn-primary" style="cursor: pointer; display: inline-block;" onclick="window.loadBPMNDiagram(event)">
+                                        <i class="fa fa-refresh"/> Load Diagram
                                     </div>
-                                    <div class="btn btn-primary" style="cursor: pointer; display: inline-block; margin-bottom: 10px;"
-                                         onclick="window.loadBPMNDiagram(event)">
-                                        <i class="fa fa-refresh"/> Load Diagram from XML above
-                                    </div>
-                                    <div id="bpmn-display-container" style="height: 500px; border: 1px solid #dee2e6; background: #fafafa;">
-                                        <div id="bpmn-loading" style="display: flex; align-items: center; justify-content: center; height: 100%; color: #6c757d;">
-                                            <div class="text-center">
-                                                <i class="fa fa-sitemap fa-3x mb-3"/>
-                                                <div>BPMN Diagram will be rendered here</div>
-                                                <small>Click Load Diagram button to render the diagram</small>
-                                            </div>
+                                </div>
+                                
+                                <div id="bpmn-display-container" style="height: 500px; border: 1px solid #dee2e6; background: #fafafa;">
+                                    <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #6c757d;">
+                                        <div class="text-center">
+                                            <i class="fa fa-sitemap fa-3x mb-3"/>
+                                            <div>BPMN Diagram</div>
+                                            <small>Click "Load Diagram" to render the diagram from XML above</small>
                                         </div>
                                     </div>
                                 </div>
@@ -92,12 +73,8 @@
             <search>
                 <field name="name"/>
                 <field name="description"/>
-                <field name="version"/>
                 <filter string="Active" name="active" domain="[('active', '=', True)]"/>
                 <filter string="Archived" name="inactive" domain="[('active', '=', False)]"/>
-                <group expand="0" string="Group By">
-                    <filter string="Version" name="version" context="{'group_by': 'version'}"/>
-                </group>
             </search>
         </field>
     </record>

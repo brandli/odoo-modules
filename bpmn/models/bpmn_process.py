@@ -30,12 +30,6 @@ class BPMNProcess(models.Model):
         help="Whether this process is active"
     )
     
-    version = fields.Char(
-        string='Version',
-        default='1.0',
-        help="Process version"
-    )
-    
     @api.model
     def create(self, vals):
         """Override create to provide default BPMN XML if none provided"""
