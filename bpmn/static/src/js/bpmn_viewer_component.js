@@ -10,48 +10,63 @@ export class BPMNViewerComponent extends Component {
     static template = "bpmn.BPMNViewerTemplate";
     
     setup() {
-        // Now we can use OWL hooks properly since this will be mounted
-        this.bpmnContainerRef = useRef("bpmnContainer");
-        this.state = useState({
-            error: null,
-            loading: false,
-            lastMessage: null
-        });
+        // For now, let's simplify and just use the basic approach
+        // TODO: Add back adaptive hooks later when auto-mounting works
         
-        // Store BPMN viewer instance for cleanup
+        console.log('BPMN Viewer Component: Setup called (simplified mode)');
+        
+        // Use instance variables for now (like the working loader)
+        this.error = null;
+        this.loading = false;
+        this.lastMessage = null;
+        this.bpmnContainerRef = null; // Will use getElementById as fallback
         this.viewer = null;
         
-        onMounted(() => {
-            console.log('BPMN Viewer: Component mounted');
-            // Make the load function available globally for backward compatibility
-            window.loadBPMNDiagram = this.loadBPMNDiagram.bind(this);
-            
-            // Also add a button click listener as fallback
-            this.addGlobalButtonListener();
-        });
-        
-        onWillDestroy(() => {
-            this.cleanup();
-        });
+        // Make function available immediately (like the working loader)
+        window.loadBPMNDiagram = this.loadBPMNDiagram.bind(this);
+        console.log('BPMN Viewer Component: Global function set');
     }
     
     // Helper methods for state management
     showError(message) {
-        this.state.error = message;
-        this.state.loading = false;
+        if (this.state) {
+            // Using hooks
+            this.state.error = message;
+            this.state.loading = false;
+        } else {
+            // Using instance variables
+            this.error = message;
+            this.loading = false;
+        }
         console.error('BPMN Viewer error:', message);
     }
     
     showMessage(message) {
-        this.state.lastMessage = message;
-        this.state.error = null;
+        if (this.state) {
+            // Using hooks
+            this.state.lastMessage = message;
+            this.state.error = null;
+        } else {
+            // Using instance variables
+            this.lastMessage = message;
+            this.error = null;
+        }
         console.log('BPMN Viewer:', message);
     }
     
     setLoading(loading) {
-        this.state.loading = loading;
-        if (loading) {
-            this.state.error = null;
+        if (this.state) {
+            // Using hooks
+            this.state.loading = loading;
+            if (loading) {
+                this.state.error = null;
+            }
+        } else {
+            // Using instance variables
+            this.loading = loading;
+            if (loading) {
+                this.error = null;
+            }
         }
     }
     
@@ -89,8 +104,17 @@ export class BPMNViewerComponent extends Component {
                 return;
             }
             
-            // Use the OWL ref for the container
-            const container = this.bpmnContainerRef.el;
+            // Use the OWL ref for the container when available, fallback to getElementById
+            let container = null;
+            
+            if (this.bpmnContainerRef && this.bpmnContainerRef.el) {
+                container = this.bpmnContainerRef.el;
+                console.log('BPMN Viewer: Using OWL ref for container');
+            } else {
+                container = document.getElementById('bpmn-display-container');
+                console.log('BPMN Viewer: Using getElementById fallback for container');
+            }
+            
             if (!container) {
                 this.showError('Could not find display container!');
                 return;
@@ -184,3 +208,9 @@ export class BPMNViewerComponent extends Component {
 
 // Register the component
 registry.category("bpmn_components").add("BPMNViewerComponent", BPMNViewerComponent);
+
+// Immediately create an instance to make the function available (like bpmn_loader does)
+// This ensures window.loadBPMNDiagram is set when the module loads
+const bpmnViewerComponent = new BPMNViewerComponent();
+bpmnViewerComponent.setup();
+console.log('BPMN Viewer Component: Module loaded and ready');
