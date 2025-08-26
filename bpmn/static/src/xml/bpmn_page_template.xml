@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="bpmn.BPMNPageTemplate">
+        <div class="bpmn-page-container">
+            <div class="alert alert-info mb-3">
+                <strong>BPMN XML Source:</strong> Edit the BPMN process definition in the field above, then load the diagram.
+            </div>
+            
+            <!-- Include the BPMN Viewer Component -->
+            <BPMNViewerComponent/>
+        </div>
+    </t>
+</templates>
