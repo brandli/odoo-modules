@@ -19,13 +19,13 @@ This is a foundational implementation that can be extended with editing capabili
     'data': [
         'security/ir.model.access.csv',
         'views/bpmn_process_views.xml',
-    ],
-    'demo': [
         'data/demo_data.xml',
     ],
     'assets': {
         'web.assets_backend': [
-            # All assets temporarily disabled for debugging
+            'bpmn/static/lib/bpmn-js/dist/bpmn-viewer.development.js',
+            'bpmn/static/lib/bpmn-js/dist/bpmn-js.css',
+            'bpmn/static/src/js/bpmn_loader.js',
         ],
     },
     'installable': True,

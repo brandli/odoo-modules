@@ -1,17 +1,23 @@
 /** @odoo-module **/
 
 import { registry } from "@web/core/registry";
-import { Component, onMounted, onWillDestroy, useRef } from "@odoo/owl";
+import { Component, useRef, onMounted, onWillDestroy, onPatched } from "@odoo/owl";
 
 export class BPMNWidget extends Component {
     static template = "bpmn.BPMNWidget";
+    static props = {
+        record: Object,
+        name: String,
+        readonly: { type: Boolean, optional: true },
+    };
 
     setup() {
-        this.containerRef = useRef("bpmnContainer");
+        this.bpmnContainerRef = useRef("bpmnContainer");
         this.viewer = null;
         
         onMounted(() => this.initViewer());
         onWillDestroy(() => this.cleanup());
+        onPatched(() => this.updateDiagram());
     }
 
     get xmlContent() {
@@ -28,7 +34,7 @@ export class BPMNWidget extends Component {
             
             // BPMN.js exports the Viewer directly as BpmnJS
             this.viewer = new window.BpmnJS({
-                container: this.containerRef.el,
+                container: this.bpmnContainerRef.el,
                 width: "100%",
                 height: "400px",
             });
@@ -41,7 +47,7 @@ export class BPMNWidget extends Component {
     }
 
     async updateDiagram() {
-        if (!this.viewer) {
+        if (!this.viewer || !this.bpmnContainerRef.el) {
             return;
         }
 
@@ -62,8 +68,8 @@ export class BPMNWidget extends Component {
     }
 
     showError(message) {
-        if (this.containerRef.el) {
-            this.containerRef.el.innerHTML = `
+        if (this.bpmnContainerRef.el) {
+            this.bpmnContainerRef.el.innerHTML = `
                 <div class="alert alert-warning text-center p-4" style="height: 400px; display: flex; align-items: center; justify-content: center;">
                     <div>
                         <i class="fa fa-exclamation-triangle fa-2x mb-2"></i>
@@ -75,8 +81,8 @@ export class BPMNWidget extends Component {
     }
 
     showPlaceholder() {
-        if (this.containerRef.el) {
-            this.containerRef.el.innerHTML = `
+        if (this.bpmnContainerRef.el) {
+            this.bpmnContainerRef.el.innerHTML = `
                 <div class="text-center text-muted p-4" style="height: 400px; display: flex; align-items: center; justify-content: center; border: 2px dashed #dee2e6;">
                     <div>
                         <i class="fa fa-sitemap fa-3x mb-3"></i>
@@ -100,4 +106,4 @@ export class BPMNWidget extends Component {
     }
 }
 
-registry.category("fields").add("bpmn_viewer", BPMNWidget);
+registry.category("fields").add("bpmn_widget", BPMNWidget);

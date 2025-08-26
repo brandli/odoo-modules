@@ -21,10 +21,6 @@
         <field name="arch" type="xml">
             <form>
                 <sheet>
-                    <div class="oe_button_box" name="button_box">
-                        <field name="active" widget="boolean_button" 
-                               options="{'terminology': 'archive'}"/>
-                    </div>
                     <div class="oe_title">
                         <h1>
                             <field name="name" placeholder="Process Name"/>
@@ -33,16 +29,56 @@
                     <group>
                         <group>
                             <field name="version"/>
+                            <field name="description"/>
                         </group>
                         <group>
-                            <field name="description"/>
+                            <field name="active"/>
                         </group>
                     </group>
                     
-                    <group>
-                        <field name="description"/>
-                        <field name="bpmn_xml"/>
-                    </group>
+                    <notebook>
+                        <page string="BPMN Diagram" name="diagram">
+                            <div style="margin: 10px 0;">
+                                <div class="alert alert-info">
+                                    <strong>BPMN Diagram:</strong> The diagram is now displayed on the XML Source tab for easier editing and viewing.
+                                </div>
+                                <div class="text-center" style="margin: 50px; color: #6c757d;">
+                                    <i class="fa fa-arrow-right fa-2x"/>
+                                    <div style="margin-top: 10px;">
+                                        <strong>Go to the "XML Source" tab to view and edit the BPMN diagram</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </page>
+                        <page string="XML Source" name="xml_source">
+                            <div style="margin: 10px 0;">
+                                <div class="alert alert-warning">
+                                    <strong>BPMN XML Source:</strong> Edit the BPMN process definition below. Make sure it's valid BPMN 2.0 XML.
+                                </div>
+                                <field name="bpmn_xml" widget="text" nolabel="1" style="min-height: 400px; font-family: monospace;"/>
+                                
+                                <!-- BPMN Diagram Display -->
+                                <div style="margin-top: 20px;">
+                                    <div class="alert alert-info">
+                                        <strong>BPMN Diagram Preview:</strong> Visual representation of the XML above.
+                                    </div>
+                                    <div class="btn btn-primary" style="cursor: pointer; display: inline-block; margin-bottom: 10px;"
+                                         onclick="window.loadBPMNDiagram(event)">
+                                        <i class="fa fa-refresh"/> Load Diagram from XML above
+                                    </div>
+                                    <div id="bpmn-display-container" style="height: 500px; border: 1px solid #dee2e6; background: #fafafa;">
+                                        <div id="bpmn-loading" style="display: flex; align-items: center; justify-content: center; height: 100%; color: #6c757d;">
+                                            <div class="text-center">
+                                                <i class="fa fa-sitemap fa-3x mb-3"/>
+                                                <div>BPMN Diagram will be rendered here</div>
+                                                <small>Click Load Diagram button to render the diagram</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </page>
+                    </notebook>
                 </sheet>
             </form>
         </field>
@@ -71,8 +107,9 @@
         <field name="name">BPMN Processes</field>
         <field name="res_model">bpmn.process</field>
         <field name="view_mode">list,form</field>
+        <field name="view_id" ref="view_bpmn_process_tree"/>
         <field name="search_view_id" ref="view_bpmn_process_search"/>
-        <field name="context">{'search_default_active': 1}</field>
+        <field name="context">{}</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
                 Create your first BPMN process!
