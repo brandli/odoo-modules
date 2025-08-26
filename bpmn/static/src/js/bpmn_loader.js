@@ -19,27 +19,10 @@ console.log('BPMN Loader: Loading...');
             }
             
             // Find the display container
-            let container = document.getElementById('bpmn-display-container');
-            
-            // If not found, try alternative methods or create one
-            if (!container) {
-                container = document.querySelector('div[style*="height: 500px"]');
-                
-                if (!container) {
-                    // Create container dynamically
-                    const button = event.target;
-                    const parentDiv = button.closest('div');
-                    if (parentDiv) {
-                        container = document.createElement('div');
-                        container.id = 'bpmn-display-container';
-                        container.style.cssText = 'height: 500px; border: 1px solid #dee2e6; background: #fafafa; margin-top: 10px;';
-                        parentDiv.appendChild(container);
-                    }
-                }
-            }
+            const container = document.getElementById('bpmn-display-container');
             
             if (!container) {
-                alert('Could not find or create display container!');
+                alert('Could not find display container!');
                 return;
             }
             
