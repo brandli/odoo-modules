@@ -38,30 +38,14 @@
                         <page string="BPMN Diagram" name="diagram">
                             <div style="margin: 10px 0;">
                                 <div class="alert alert-info">
-                                    <strong>BPMN XML Source:</strong> Edit the BPMN process definition below, then load the diagram.
+                                    <strong>BPMN XML Source:</strong> Edit the BPMN process definition below, then view the diagram.
                                 </div>
                                 <field name="bpmn_xml" widget="text" nolabel="1" style="min-height: 300px; font-family: monospace;"/>
                                 
-                                <!-- Fallback button (always present) -->
+                                <!-- OWL Component Integration (Architecture Guide Compliant) -->
                                 <div style="margin: 20px 0;">
-                                    <div class="btn btn-primary bpmn-load-button" style="cursor: pointer; display: inline-block;" onclick="window.loadBPMNDiagram(event)">
-                                        <i class="fa fa-refresh"/> Load Diagram
-                                    </div>
-                                </div>
-                                
-                                <!-- Container that will be managed by OWL component -->
-                                <div id="bpmn-owl-mount-point" style="margin: 20px 0;">
-                                    <!-- OWL component will mount here and may add its own button -->
-                                </div>
-                                
-                                <!-- Fallback container (if OWL mounting fails) -->
-                                <div id="bpmn-display-container" style="height: 500px; border: 1px solid #dee2e6; background: #fafafa;">
-                                    <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #6c757d;">
-                                        <div class="text-center">
-                                            <i class="fa fa-sitemap fa-3x mb-3"/>
-                                            <div>BPMN Diagram</div>
-                                            <small>Click "Load Diagram" to render the diagram from XML above</small>
-                                        </div>
+                                    <div id="bpmn-owl-mount-point">
+                                        <!-- OWL component will be auto-mounted here -->
                                     </div>
                                 </div>
                             </div>

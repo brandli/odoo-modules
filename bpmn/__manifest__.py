@@ -1,6 +1,6 @@
 {
     'name': 'BPMN Viewer',
-    'version': '18.0.1.0.0',
+    'version': '18.0.1.1.0',
     'category': 'Productivity',
     'summary': 'BPMN.js integration for Odoo - Basic viewer implementation',
     'description': """
@@ -23,14 +23,13 @@ This is a foundational implementation that can be extended with editing capabili
     ],
     'assets': {
         'web.assets_backend': [
+            # BPMN.js core library and styles
             'bpmn/static/lib/bpmn-js/dist/bpmn-viewer.development.js',
             'bpmn/static/lib/bpmn-js/dist/bpmn-js.css',
-            'bpmn/static/src/js/bpmn_loader.js',
-            'bpmn/static/src/js/bpmn_viewer_component.js',
-            'bpmn/static/src/js/bpmn_viewer_widget.js',
-            'bpmn/static/src/js/bpmn_auto_mount.js',
-            'bpmn/static/src/xml/bpmn_loader_template.xml',
-            'bpmn/static/src/xml/bpmn_page_template.xml',
+            
+            # BPMN OWL Component (production implementation)
+            'bpmn/static/src/js/bpmn_component.js',
+            'bpmn/static/src/js/bpmn_mount.js',
         ],
     },
     'installable': True,
