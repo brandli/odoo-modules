@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-import { Component as OwlComponent, useRef, onMounted, onWillDestroy, useState, xml } from "@odoo/owl";
+import { Component, useRef, onMounted, onWillDestroy, useState, xml } from "@odoo/owl";
 import { registry as webRegistry } from "@web/core/registry";
 
 /**
@@ -12,7 +12,7 @@ import { registry as webRegistry } from "@web/core/registry";
  * - Reactive state management with useState
  * - Proper cleanup and resource management
  */
-export class BPMNOwlComponent extends OwlComponent {
+export class BPMNOwlComponent extends Component {
     static template = xml`
         <div class="bpmn-owl-component">
             <div class="d-flex justify-content-between align-items-center mb-3">
