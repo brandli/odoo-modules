@@ -76,6 +76,17 @@ export class BPMNOwlComponent extends Component {
         onWillDestroy(() => {
             console.log('BPMNOwlComponent: Cleaning up...');
             if (this.viewer) {
+                // Remove event listeners
+                this.viewer.off('element.click');
+                this.viewer.off('canvas.click');
+                this.viewer.off('canvas.viewbox.changed');
+                this.viewer.off('import.parse.start');
+                this.viewer.off('import.parse.complete');
+                this.viewer.off('import.render.start');
+                this.viewer.off('import.render.complete');
+                this.viewer.off('import.done');
+                
+                // Destroy viewer
                 this.viewer.destroy();
                 this.viewer = null;
             }
@@ -122,6 +133,9 @@ export class BPMNOwlComponent extends Component {
                 container: this.containerRef.el
             });
 
+            // Setup event bridging
+            this.setupEventBridge();
+
             // Import the XML
             console.log('BPMNOwlComponent: Importing XML...');
             const result = await this.viewer.importXML(xmlContent);
@@ -149,6 +163,70 @@ export class BPMNOwlComponent extends Component {
         } finally {
             this.state.loading = false;
         }
+    }
+
+    setupEventBridge() {
+        if (!this.viewer) return;
+        
+        console.log('BPMNOwlComponent: Setting up event bridge...');
+        
+        // Element selection events
+        this.viewer.on('element.click', (event) => {
+            if (event.element && event.element.id) {
+                this.state.selectedElement = event.element.id;
+                console.log('BPMNOwlComponent: Element selected:', event.element.id);
+            }
+        });
+        
+        // Clear selection when clicking canvas
+        this.viewer.on('canvas.click', (event) => {
+            // Only clear if we clicked on the canvas itself, not an element
+            if (!event.element || event.element.type === 'bpmn:Process') {
+                this.state.selectedElement = null;
+                console.log('BPMNOwlComponent: Selection cleared');
+            }
+        });
+        
+        // Zoom/pan events
+        this.viewer.on('canvas.viewbox.changed', () => {
+            if (this.viewer) {
+                const canvas = this.viewer.get('canvas');
+                const newZoom = Math.round(canvas.zoom() * 100) / 100;
+                if (this.state.zoomLevel !== newZoom) {
+                    this.state.zoomLevel = newZoom;
+                    this.state.viewChanged = Date.now();
+                    console.log('BPMNOwlComponent: Zoom changed to:', newZoom);
+                }
+            }
+        });
+        
+        // Import events (for better loading state management)
+        this.viewer.on('import.parse.start', () => {
+            console.log('BPMNOwlComponent: Starting XML parse...');
+        });
+        
+        this.viewer.on('import.parse.complete', () => {
+            console.log('BPMNOwlComponent: XML parse complete');
+        });
+        
+        this.viewer.on('import.render.start', () => {
+            console.log('BPMNOwlComponent: Starting diagram render...');
+        });
+        
+        this.viewer.on('import.render.complete', () => {
+            console.log('BPMNOwlComponent: Diagram render complete');
+        });
+        
+        this.viewer.on('import.done', (event) => {
+            console.log('BPMNOwlComponent: Import done event received');
+            if (event.error) {
+                console.error('BPMNOwlComponent: Import error from event:', event.error);
+            } else {
+                console.log('BPMNOwlComponent: Import successful via event');
+            }
+        });
+        
+        console.log('BPMNOwlComponent: Event bridge setup complete');
     }
 
     updateDiagramInfo() {
