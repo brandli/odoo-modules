@@ -106,6 +106,28 @@ export class BPMNOwlComponent extends Component {
                     </span>
                 </div>
             </div>
+
+            <!-- Circuit Breaker Status Indicator -->
+            <div t-if="state.isCircuitOpen" 
+                 class="alert alert-warning mb-2 small d-flex justify-content-between align-items-center">
+                <div>
+                    <i class="fa fa-shield-alt"/> 
+                    <strong>System Protection Active</strong> - 
+                    Error threshold reached. 
+                    <span t-if="state.recoveryInProgress">
+                        <i class="fa fa-spinner fa-spin"/> Automatic recovery in progress.
+                    </span>
+                    <span t-else="">
+                        Waiting for cooldown period.
+                    </span>
+                </div>
+                <button type="button" 
+                        class="btn btn-outline-warning btn-sm" 
+                        t-on-click="manualResetCircuitBreaker"
+                        title="Manually reset error protection">
+                    <i class="fa fa-refresh"/> Reset
+                </button>
+            </div>
             
             <div t-if="state.message" 
                  class="alert mb-3"
@@ -142,7 +164,11 @@ export class BPMNOwlComponent extends Component {
             elementCount: 0,
             diagramTitle: '',
             lastModified: null,
-            viewChanged: 0
+            viewChanged: 0,
+            // Error boundary state
+            isCircuitOpen: false,
+            errorCount: 0,
+            recoveryInProgress: false
         });
         
         // Comprehensive memory management tracking
@@ -154,6 +180,16 @@ export class BPMNOwlComponent extends Component {
         this.observables = new Set(); // Track observables/subscriptions for cleanup
         this.domReferences = new WeakMap(); // Weak references to prevent memory leaks
         this.isDestroyed = false; // Prevent operations after destruction
+        
+        // Error boundary and circuit breaker patterns
+        this.errorCount = 0; // Track consecutive errors
+        this.lastErrorTime = null; // Track last error timestamp
+        this.isCircuitOpen = false; // Circuit breaker state
+        this.recoveryAttempts = 0; // Track recovery attempts
+        this.maxRetries = 3; // Maximum retry attempts
+        this.circuitBreakerThreshold = 3; // Errors before circuit opens
+        this.circuitBreakerCooldown = 30000; // 30 seconds cooldown
+        this.baseRetryDelay = 1000; // Base delay for exponential backoff (1 second)
         
         onMounted(() => {
             console.log('BPMNOwlComponent: Mounted successfully');
@@ -405,8 +441,254 @@ export class BPMNOwlComponent extends Component {
         return observable;
     }
 
+    /**
+     * Error Boundary and Circuit Breaker Patterns
+     * Implements resilient error handling with automatic recovery
+     */
+
+    /**
+     * Check if circuit breaker should prevent operations
+     */
+    isCircuitBreakerOpen() {
+        if (!this.isCircuitOpen) return false;
+        
+        // Check if cooldown period has passed
+        const now = Date.now();
+        if (this.lastErrorTime && (now - this.lastErrorTime) > this.circuitBreakerCooldown) {
+            console.log('BPMNOwlComponent: Circuit breaker cooldown expired, attempting recovery');
+            this.resetCircuitBreaker();
+            return false;
+        }
+        
+        return true;
+    }
+
+    /**
+     * Record an error and update circuit breaker state
+     */
+    recordError(error, operation = 'unknown') {
+        this.errorCount++;
+        this.lastErrorTime = Date.now();
+        
+        // Update state for UI
+        if (!this.isDestroyed) {
+            this.state.errorCount = this.errorCount;
+        }
+        
+        console.error(`BPMNOwlComponent: Error in ${operation} (count: ${this.errorCount}):`, error);
+        
+        // Open circuit breaker if threshold reached
+        if (this.errorCount >= this.circuitBreakerThreshold) {
+            this.isCircuitOpen = true;
+            
+            // Update state for UI
+            if (!this.isDestroyed) {
+                this.state.isCircuitOpen = true;
+                this.state.error = true;
+                this.state.message = `⚠️ System protection activated. Too many errors detected. Please wait ${Math.round(this.circuitBreakerCooldown/1000)} seconds before trying again.`;
+            }
+            
+            console.warn('BPMNOwlComponent: Circuit breaker opened due to excessive errors');
+            
+            // Auto-recovery timer
+            this.safeSetTimeout(() => {
+                if (!this.isDestroyed) {
+                    this.attemptRecovery();
+                }
+            }, this.circuitBreakerCooldown);
+        }
+    }
+
+    /**
+     * Record successful operation and potentially reset error count
+     */
+    recordSuccess(operation = 'unknown') {
+        console.log(`BPMNOwlComponent: Successful ${operation} operation`);
+        
+        // Gradually reduce error count on success
+        if (this.errorCount > 0) {
+            this.errorCount = Math.max(0, this.errorCount - 1);
+            console.log(`BPMNOwlComponent: Error count reduced to ${this.errorCount}`);
+        }
+        
+        // Reset circuit breaker if it was open
+        if (this.isCircuitOpen) {
+            this.resetCircuitBreaker();
+        }
+    }
+
+    /**
+     * Reset circuit breaker to closed state
+     */
+    resetCircuitBreaker() {
+        this.isCircuitOpen = false;
+        this.errorCount = 0;
+        this.recoveryAttempts = 0;
+        this.lastErrorTime = null;
+        
+        // Update state for UI
+        if (!this.isDestroyed) {
+            this.state.isCircuitOpen = false;
+            this.state.errorCount = 0;
+            this.state.recoveryInProgress = false;
+            
+            if (this.state.error && this.state.message.includes('System protection activated')) {
+                this.state.error = false;
+                this.state.message = '';
+            }
+        }
+        
+        console.log('BPMNOwlComponent: Circuit breaker reset to closed state');
+    }
+
+    /**
+     * Attempt automatic recovery from circuit breaker state
+     */
+    async attemptRecovery() {
+        if (this.isDestroyed) return;
+        
+        this.recoveryAttempts++;
+        
+        // Update state for UI
+        if (!this.isDestroyed) {
+            this.state.recoveryInProgress = true;
+        }
+        
+        console.log(`BPMNOwlComponent: Attempting recovery (attempt ${this.recoveryAttempts})`);
+        
+        try {
+            // Test if BPMN.js is available
+            if (typeof window.BpmnJS === 'undefined') {
+                throw new Error('BPMN.js library still not available');
+            }
+            
+            // Test basic functionality
+            const testViewer = new window.BpmnJS();
+            testViewer.destroy(); // Immediate cleanup
+            
+            // Recovery successful
+            this.resetCircuitBreaker();
+            
+            if (!this.isDestroyed) {
+                this.state.message = '✅ System recovered automatically. You can try loading the diagram again.';
+            }
+            
+            // Clear recovery message after a delay
+            this.safeSetTimeout(() => {
+                if (!this.isDestroyed && this.state.message.includes('System recovered')) {
+                    this.state.message = '';
+                }
+            }, 5000);
+            
+        } catch (error) {
+            console.warn('BPMNOwlComponent: Recovery attempt failed:', error);
+            
+            // Update state
+            if (!this.isDestroyed) {
+                this.state.recoveryInProgress = false;
+            }
+            
+            // Extend cooldown if recovery fails
+            if (this.recoveryAttempts < 3) {
+                const nextRecoveryDelay = this.circuitBreakerCooldown * (this.recoveryAttempts + 1);
+                this.safeSetTimeout(() => {
+                    if (!this.isDestroyed) {
+                        this.attemptRecovery();
+                    }
+                }, nextRecoveryDelay);
+            } else {
+                if (!this.isDestroyed) {
+                    this.state.message = '❌ Automatic recovery failed. Please refresh the page.';
+                }
+            }
+        }
+    }
+
+    /**
+     * Execute operation with retry and exponential backoff
+     */
+    async executeWithRetry(operation, operationName, maxAttempts = null) {
+        const attempts = maxAttempts || this.maxRetries;
+        
+        for (let attempt = 1; attempt <= attempts; attempt++) {
+            try {
+                if (this.isDestroyed) {
+                    throw new Error('Component destroyed during operation');
+                }
+                
+                // Check circuit breaker before each attempt
+                if (this.isCircuitBreakerOpen()) {
+                    throw new Error('Circuit breaker is open - operation blocked');
+                }
+                
+                console.log(`BPMNOwlComponent: Executing ${operationName} (attempt ${attempt}/${attempts})`);
+                
+                const result = await operation();
+                
+                // Record success
+                this.recordSuccess(operationName);
+                return result;
+                
+            } catch (error) {
+                console.warn(`BPMNOwlComponent: ${operationName} attempt ${attempt} failed:`, error);
+                
+                // Record error
+                this.recordError(error, operationName);
+                
+                // If this is the last attempt or circuit breaker is open, throw the error
+                if (attempt === attempts || this.isCircuitBreakerOpen()) {
+                    throw error;
+                }
+                
+                // Calculate exponential backoff delay
+                const delay = this.baseRetryDelay * Math.pow(2, attempt - 1);
+                const jitter = Math.random() * 1000; // Add jitter to prevent thundering herd
+                const totalDelay = delay + jitter;
+                
+                console.log(`BPMNOwlComponent: Retrying ${operationName} in ${Math.round(totalDelay)}ms`);
+                
+                // Wait before retry
+                await new Promise(resolve => {
+                    this.safeSetTimeout(resolve, totalDelay);
+                });
+            }
+        }
+    }
+
+    /**
+     * Safe error boundary wrapper for any operation
+     */
+    async safeExecute(operation, operationName, fallback = null) {
+        try {
+            if (this.isDestroyed) {
+                console.warn(`BPMNOwlComponent: Cannot execute ${operationName} - component destroyed`);
+                return fallback;
+            }
+            
+            return await operation();
+            
+        } catch (error) {
+            console.error(`BPMNOwlComponent: Safe execution failed for ${operationName}:`, error);
+            this.recordError(error, operationName);
+            
+            // Show user-friendly error message
+            if (!this.isDestroyed) {
+                this.state.error = true;
+                this.state.message = `❌ ${operationName} failed: ${error.message}`;
+            }
+            
+            return fallback;
+        }
+    }
+
     async loadDiagram() {
-        console.log('BPMNOwlComponent: Loading diagram...');
+        console.log('BPMNOwlComponent: Loading diagram with error boundary protection...');
+        
+        // Check circuit breaker before attempting operation
+        if (this.isCircuitBreakerOpen()) {
+            console.warn('BPMNOwlComponent: Load blocked by circuit breaker');
+            return;
+        }
         
         // Check if component is destroyed
         if (this.isDestroyed) {
@@ -414,134 +696,148 @@ export class BPMNOwlComponent extends Component {
             return;
         }
         
-        // Reset all states at start
-        this.state.loading = true;
-        this.state.error = false;
-        this.state.loaded = false;
-        this.state.message = "";  // No loading message for clean UI
-        
-        try {
-            // Find BPMN XML data in the form
-            const xmlField = document.querySelector('textarea[id*="bpmn_xml"]');
-            if (!xmlField || !xmlField.value.trim()) {
-                throw new Error('No BPMN XML data found. Please add BPMN XML content first.');
-            }
-
-            const xmlContent = xmlField.value.trim();
-            console.log('BPMNOwlComponent: XML content length:', xmlContent.length);
-            console.log('BPMNOwlComponent: XML preview:', xmlContent.substring(0, 200) + '...');
-
-            // Check if BPMN.js is available
-            if (typeof window.BpmnJS === 'undefined') {
-                throw new Error('BPMN.js library not loaded');
-            }
-
-            // Clean up existing viewer with comprehensive cleanup
-            if (this.viewer) {
-                // Perform partial cleanup for existing viewer
-                for (const [eventName, handler] of this.eventListeners) {
-                    this.viewer.off(eventName, handler);
-                }
-                this.eventListeners.clear();
+        // Use retry mechanism for diagram loading
+        return this.executeWithRetry(async () => {
+            return this.safeExecute(async () => {
+                // Reset all states at start
+                this.state.loading = true;
+                this.state.error = false;
+                this.state.loaded = false;
+                this.state.message = "";
                 
-                this.viewer.destroy();
-                this.viewer = null;
-            }
-
-            // Check again if component is destroyed during async operations
-            if (this.isDestroyed) {
-                console.warn('BPMNOwlComponent: Component destroyed during load operation');
-                return;
-            }
-
-            // Create new viewer with memory management
-            this.viewer = new window.BpmnJS({
-                container: this.containerRef.el
-            });
-
-            // Track any canvas contexts created by BPMN.js (defensive approach)
-            try {
-                const canvas = this.viewer.get('canvas');
-                if (canvas) {
-                    // Try different ways to access canvas context safely
-                    let canvasContext = null;
-                    
-                    // Method 1: Check for SVG node function
-                    if (canvas._svg && typeof canvas._svg.node === 'function') {
-                        canvasContext = canvas._svg.node();
-                    }
-                    // Method 2: Check for direct SVG element
-                    else if (canvas._svg && canvas._svg.element) {
-                        canvasContext = canvas._svg.element;
-                    }
-                    // Method 3: Check for container element
-                    else if (canvas._container) {
-                        canvasContext = canvas._container;
-                    }
-                    
-                    if (canvasContext) {
-                        this.trackCanvasContext(canvasContext);
-                        console.log('BPMNOwlComponent: Canvas context tracked successfully');
-                    } else {
-                        console.log('BPMNOwlComponent: No trackable canvas context found');
-                    }
+                // Validate preconditions
+                const xmlField = document.querySelector('textarea[id*="bpmn_xml"]');
+                if (!xmlField || !xmlField.value.trim()) {
+                    throw new Error('No BPMN XML data found. Please add BPMN XML content first.');
                 }
-            } catch (error) {
-                console.warn('BPMNOwlComponent: Could not track canvas context:', error);
-                // Continue without canvas tracking - not critical for functionality
-            }
 
-            // Setup event bridging with memory management
-            this.setupEventBridge();
+                const xmlContent = xmlField.value.trim();
+                console.log('BPMNOwlComponent: XML content length:', xmlContent.length);
 
-            // Import the XML with safety check
-            console.log('BPMNOwlComponent: Importing XML...');
-            
-            if (this.isDestroyed) {
-                console.warn('BPMNOwlComponent: Component destroyed before import');
-                return;
-            }
-            
-            const result = await this.viewer.importXML(xmlContent);
-            
-            // Final safety check after async operation
-            if (this.isDestroyed) {
-                console.warn('BPMNOwlComponent: Component destroyed after import');
-                return;
-            }
-            
-            if (result.warnings && result.warnings.length > 0) {
-                console.warn('BPMNOwlComponent: Import warnings:', result.warnings);
-            }
-            
-            // Success state
-            this.state.loaded = true;
-            this.state.error = false;  // Ensure error state is cleared
-            this.state.message = "";   // Clear success message for clean UI
-            this.state.lastModified = new Date().toISOString();
-            
-            // Update enhanced state using safe animation frame
-            this.safeRequestAnimationFrame(() => {
-                this.updateDiagramInfo();
-            });
-            
-            console.log('BPMNOwlComponent: Diagram loaded successfully');
-            
-        } catch (error) {
-            console.error('BPMNOwlComponent: Load error:', error);
+                // Check if BPMN.js is available
+                if (typeof window.BpmnJS === 'undefined') {
+                    throw new Error('BPMN.js library not loaded. Please refresh the page.');
+                }
+
+                // Clean up existing viewer with comprehensive cleanup
+                if (this.viewer) {
+                    await this.safeExecute(async () => {
+                        // Perform partial cleanup for existing viewer
+                        for (const [eventName, handler] of this.eventListeners) {
+                            this.viewer.off(eventName, handler);
+                        }
+                        this.eventListeners.clear();
+                        
+                        this.viewer.destroy();
+                        this.viewer = null;
+                    }, 'viewer cleanup');
+                }
+
+                // Check again if component is destroyed during async operations
+                if (this.isDestroyed) {
+                    throw new Error('Component destroyed during load operation');
+                }
+
+                // Create new viewer with error boundary
+                this.viewer = await this.safeExecute(async () => {
+                    const viewer = new window.BpmnJS({
+                        container: this.containerRef.el
+                    });
+                    
+                    // Track any canvas contexts created by BPMN.js (defensive approach)
+                    try {
+                        const canvas = viewer.get('canvas');
+                        if (canvas) {
+                            // Try different ways to access canvas context safely
+                            let canvasContext = null;
+                            
+                            if (canvas._svg && typeof canvas._svg.node === 'function') {
+                                canvasContext = canvas._svg.node();
+                            } else if (canvas._svg && canvas._svg.element) {
+                                canvasContext = canvas._svg.element;
+                            } else if (canvas._container) {
+                                canvasContext = canvas._container;
+                            }
+                            
+                            if (canvasContext) {
+                                this.trackCanvasContext(canvasContext);
+                                console.log('BPMNOwlComponent: Canvas context tracked successfully');
+                            }
+                        }
+                    } catch (error) {
+                        console.warn('BPMNOwlComponent: Could not track canvas context:', error);
+                    }
+                    
+                    return viewer;
+                }, 'viewer creation');
+
+                if (!this.viewer) {
+                    throw new Error('Failed to create BPMN viewer');
+                }
+
+                // Setup event bridging with error boundary
+                await this.safeExecute(async () => {
+                    this.setupEventBridge();
+                }, 'event bridge setup');
+
+                // Import the XML with safety check
+                console.log('BPMNOwlComponent: Importing XML...');
+                
+                if (this.isDestroyed) {
+                    throw new Error('Component destroyed before import');
+                }
+                
+                const result = await this.viewer.importXML(xmlContent);
+                
+                // Final safety check after async operation
+                if (this.isDestroyed) {
+                    throw new Error('Component destroyed after import');
+                }
+                
+                if (result.warnings && result.warnings.length > 0) {
+                    console.warn('BPMNOwlComponent: Import warnings:', result.warnings);
+                }
+                
+                // Success state
+                this.state.loaded = true;
+                this.state.error = false;
+                this.state.message = "";
+                this.state.lastModified = new Date().toISOString();
+                
+                // Update enhanced state using safe animation frame
+                this.safeRequestAnimationFrame(() => {
+                    this.updateDiagramInfo();
+                });
+                
+                console.log('BPMNOwlComponent: Diagram loaded successfully');
+                return true;
+                
+            }, 'diagram loading');
+        }, 'loadDiagram').catch(error => {
+            console.error('BPMNOwlComponent: Load failed after all retries:', error);
             
             // Only update state if component is not destroyed
             if (!this.isDestroyed) {
                 this.state.error = true;
-                this.state.loaded = false;  // Reset loaded state on error
-                this.state.message = `❌ Error: ${error.message}`;
+                this.state.loaded = false;
+                
+                // Provide user-friendly error messages based on error type
+                if (error.message.includes('Circuit breaker')) {
+                    this.state.message = `⚠️ System protection active. Please wait before trying again.`;
+                } else if (error.message.includes('BPMN.js library not loaded')) {
+                    this.state.message = `❌ BPMN library not available. Please refresh the page.`;
+                } else if (error.message.includes('No BPMN XML data found')) {
+                    this.state.message = `❌ No BPMN XML content found. Please add valid BPMN XML first.`;
+                } else {
+                    this.state.message = `❌ Error: ${error.message}`;
+                }
             }
-        } finally {
+        }).finally(() => {
             // Only update loading state if component is not destroyed
             if (!this.isDestroyed) {
                 this.state.loading = false;
             }
-        }
+        });
     }
 
     setupEventBridge() {
@@ -686,11 +982,13 @@ export class BPMNOwlComponent extends Component {
         }
     }
 
-    // Advanced interaction methods with memory management
+    // Advanced interaction methods with memory management and error boundaries
     async zoomFit() {
-        if (!this.viewer || !this.state.loaded || this.isDestroyed) return;
-        
-        try {
+        return this.safeExecute(async () => {
+            if (!this.viewer || !this.state.loaded || this.isDestroyed) {
+                throw new Error('Viewer not ready for zoom operation');
+            }
+            
             const canvas = this.viewer.get('canvas');
             canvas.zoom('fit-viewport');
             
@@ -702,15 +1000,17 @@ export class BPMNOwlComponent extends Component {
                     console.log('BPMNOwlComponent: Zoom fit applied, new zoom:', this.state.zoomLevel);
                 }
             });
-        } catch (error) {
-            console.error('BPMNOwlComponent: Zoom fit failed:', error);
-        }
+            
+            return true;
+        }, 'zoom fit');
     }
 
     async zoomIn() {
-        if (!this.viewer || !this.state.loaded || this.isDestroyed) return;
-        
-        try {
+        return this.safeExecute(async () => {
+            if (!this.viewer || !this.state.loaded || this.isDestroyed) {
+                throw new Error('Viewer not ready for zoom operation');
+            }
+            
             const canvas = this.viewer.get('canvas');
             const currentZoom = canvas.zoom();
             const newZoom = Math.min(4.0, currentZoom + 0.2); // Max zoom 4x
@@ -724,15 +1024,17 @@ export class BPMNOwlComponent extends Component {
                     console.log('BPMNOwlComponent: Zoomed in to:', this.state.zoomLevel);
                 }
             });
-        } catch (error) {
-            console.error('BPMNOwlComponent: Zoom in failed:', error);
-        }
+            
+            return newZoom;
+        }, 'zoom in');
     }
 
     async zoomOut() {
-        if (!this.viewer || !this.state.loaded || this.isDestroyed) return;
-        
-        try {
+        return this.safeExecute(async () => {
+            if (!this.viewer || !this.state.loaded || this.isDestroyed) {
+                throw new Error('Viewer not ready for zoom operation');
+            }
+            
             const canvas = this.viewer.get('canvas');
             const currentZoom = canvas.zoom();
             const newZoom = Math.max(0.1, currentZoom - 0.2); // Min zoom 0.1x
@@ -746,9 +1048,9 @@ export class BPMNOwlComponent extends Component {
                     console.log('BPMNOwlComponent: Zoomed out to:', this.state.zoomLevel);
                 }
             });
-        } catch (error) {
-            console.error('BPMNOwlComponent: Zoom out failed:', error);
-        }
+            
+            return newZoom;
+        }, 'zoom out');
     }
 
     clearSelection() {
@@ -881,6 +1183,28 @@ export class BPMNOwlComponent extends Component {
             }
         } catch (error) {
             console.error('BPMNOwlComponent: Select element failed:', error);
+        }
+    }
+
+    /**
+     * Manual circuit breaker reset for user control
+     */
+    manualResetCircuitBreaker() {
+        console.log('BPMNOwlComponent: Manual circuit breaker reset requested');
+        
+        // Force reset circuit breaker
+        this.resetCircuitBreaker();
+        
+        // Show confirmation message
+        if (!this.isDestroyed) {
+            this.state.message = '🔄 Error protection manually reset. You can try loading the diagram again.';
+            
+            // Clear message after delay
+            this.safeSetTimeout(() => {
+                if (!this.isDestroyed && this.state.message.includes('manually reset')) {
+                    this.state.message = '';
+                }
+            }, 3000);
         }
     }
 }
