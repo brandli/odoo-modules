@@ -9,7 +9,98 @@ import { registry as webRegistry } from "@web/core/registry";
  * Architecture-compliant OWL component implementing:
  * - Enhanced memory management with proper lifecycle hooks
  * - Container-based integration using useRef
- * - Reactive state management with useState
+ * - Reactive state managemen    clearSelection() {
+        if (!this.viewer) return;
+        
+        try {
+            const selection = this.viewer.get('selection');
+            selection.select(null);
+            this.state.selectedElement = null;
+            console.log('BPMNOwlComponent: Selection cleared programmatically');
+        } catch (error) {
+            console.error('BPMNOwlComponent: Clear selection failed:', error);
+        }
+    }
+
+    // Pan controls
+    panUp() {
+        if (!this.viewer || !this.state.loaded) return;
+        
+        try {
+            const canvas = this.viewer.get('canvas');
+            const viewbox = canvas.viewbox();
+            canvas.viewbox({
+                x: viewbox.x,
+                y: viewbox.y - 50, // Move up by 50 units
+                width: viewbox.width,
+                height: viewbox.height
+            });
+            this.state.viewChanged = Date.now();
+            console.log('BPMNOwlComponent: Panned up');
+        } catch (error) {
+            console.error('BPMNOwlComponent: Pan up failed:', error);
+        }
+    }
+
+    panDown() {
+        if (!this.viewer || !this.state.loaded) return;
+        
+        try {
+            const canvas = this.viewer.get('canvas');
+            const viewbox = canvas.viewbox();
+            canvas.viewbox({
+                x: viewbox.x,
+                y: viewbox.y + 50, // Move down by 50 units
+                width: viewbox.width,
+                height: viewbox.height
+            });
+            this.state.viewChanged = Date.now();
+            console.log('BPMNOwlComponent: Panned down');
+        } catch (error) {
+            console.error('BPMNOwlComponent: Pan down failed:', error);
+        }
+    }
+
+    panLeft() {
+        if (!this.viewer || !this.state.loaded) return;
+        
+        try {
+            const canvas = this.viewer.get('canvas');
+            const viewbox = canvas.viewbox();
+            canvas.viewbox({
+                x: viewbox.x - 50, // Move left by 50 units
+                y: viewbox.y,
+                width: viewbox.width,
+                height: viewbox.height
+            });
+            this.state.viewChanged = Date.now();
+            console.log('BPMNOwlComponent: Panned left');
+        } catch (error) {
+            console.error('BPMNOwlComponent: Pan left failed:', error);
+        }
+    }
+
+    panRight() {
+        if (!this.viewer || !this.state.loaded) return;
+        
+        try {
+            const canvas = this.viewer.get('canvas');
+            const viewbox = canvas.viewbox();
+            canvas.viewbox({
+                x: viewbox.x + 50, // Move right by 50 units
+                y: viewbox.y,
+                width: viewbox.width,
+                height: viewbox.height
+            });
+            this.state.viewChanged = Date.now();
+            console.log('BPMNOwlComponent: Panned right');
+        } catch (error) {
+            console.error('BPMNOwlComponent: Pan right failed:', error);
+        }
+    }
+
+    updateDiagramInfo() {
+}te
  * - Proper cleanup and resource management
  */
 export class BPMNOwlComponent extends Component {
@@ -52,15 +143,15 @@ export class BPMNOwlComponent extends Component {
                     <div class="btn-group me-2" role="group" t-if="state.loaded">
                         <button type="button" 
                                 class="btn btn-outline-info btn-sm" 
-                                t-on-click="panLeft"
-                                title="Pan left">
-                            <i class="fa fa-arrow-left"/>
-                        </button>
-                        <button type="button" 
-                                class="btn btn-outline-info btn-sm" 
                                 t-on-click="panUp"
                                 title="Pan up">
                             <i class="fa fa-arrow-up"/>
+                        </button>
+                        <button type="button" 
+                                class="btn btn-outline-info btn-sm" 
+                                t-on-click="panLeft"
+                                title="Pan left">
+                            <i class="fa fa-arrow-left"/>
                         </button>
                         <button type="button" 
                                 class="btn btn-outline-info btn-sm" 
@@ -389,93 +480,17 @@ export class BPMNOwlComponent extends Component {
         }
     }
 
-    clearSelection() {
-        if (!this.viewer) return;
-        
-        try {
-            const selection = this.viewer.get('selection');
-            selection.select(null);
-            this.state.selectedElement = null;
-            console.log('BPMNOwlComponent: Selection cleared programmatically');
-        } catch (error) {
-            console.error('BPMNOwlComponent: Clear selection failed:', error);
-        }
-    }
-
-    // Pan controls
-    panUp() {
+    async centerDiagram() {
         if (!this.viewer || !this.state.loaded) return;
         
         try {
             const canvas = this.viewer.get('canvas');
-            const viewbox = canvas.viewbox();
-            canvas.viewbox({
-                x: viewbox.x,
-                y: viewbox.y - 50, // Move up by 50 units
-                width: viewbox.width,
-                height: viewbox.height
-            });
+            canvas.zoom('fit-viewport', 'auto');
+            this.state.zoomLevel = Math.round(canvas.zoom() * 100) / 100;
             this.state.viewChanged = Date.now();
-            console.log('BPMNOwlComponent: Panned up');
+            console.log('BPMNOwlComponent: Diagram centered, zoom:', this.state.zoomLevel);
         } catch (error) {
-            console.error('BPMNOwlComponent: Pan up failed:', error);
-        }
-    }
-
-    panDown() {
-        if (!this.viewer || !this.state.loaded) return;
-        
-        try {
-            const canvas = this.viewer.get('canvas');
-            const viewbox = canvas.viewbox();
-            canvas.viewbox({
-                x: viewbox.x,
-                y: viewbox.y + 50, // Move down by 50 units
-                width: viewbox.width,
-                height: viewbox.height
-            });
-            this.state.viewChanged = Date.now();
-            console.log('BPMNOwlComponent: Panned down');
-        } catch (error) {
-            console.error('BPMNOwlComponent: Pan down failed:', error);
-        }
-    }
-
-    panLeft() {
-        if (!this.viewer || !this.state.loaded) return;
-        
-        try {
-            const canvas = this.viewer.get('canvas');
-            const viewbox = canvas.viewbox();
-            canvas.viewbox({
-                x: viewbox.x - 50, // Move left by 50 units
-                y: viewbox.y,
-                width: viewbox.width,
-                height: viewbox.height
-            });
-            this.state.viewChanged = Date.now();
-            console.log('BPMNOwlComponent: Panned left');
-        } catch (error) {
-            console.error('BPMNOwlComponent: Pan left failed:', error);
-        }
-    }
-
-    panRight() {
-        if (!this.viewer || !this.state.loaded) return;
-        
-        try {
-            const canvas = this.viewer.get('canvas');
-            const viewbox = canvas.viewbox();
-            canvas.viewbox({
-                x: viewbox.x + 50, // Move right by 50 units
-                y: viewbox.y,
-                width: viewbox.width,
-                height: viewbox.height
-            });
-            this.state.viewChanged = Date.now();
-            console.log('BPMNOwlComponent: Panned right');
-        } catch (error) {
-            console.error('BPMNOwlComponent: Pan right failed:', error);
+            console.error('BPMNOwlComponent: Center diagram failed:', error);
         }
     }
 
@@ -519,6 +534,19 @@ export class BPMNOwlComponent extends Component {
             }
         } catch (error) {
             console.error('BPMNOwlComponent: Select element failed:', error);
+        }
+    }
+
+    clearSelection() {
+        if (!this.viewer) return;
+        
+        try {
+            const selection = this.viewer.get('selection');
+            selection.select(null);
+            this.state.selectedElement = null;
+            console.log('BPMNOwlComponent: Selection cleared programmatically');
+        } catch (error) {
+            console.error('BPMNOwlComponent: Clear selection failed:', error);
         }
     }
 }
