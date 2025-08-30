@@ -56,7 +56,14 @@ export class BPMNOwlComponent extends Component {
             loading: false,
             loaded: false,
             message: "",
-            error: false
+            error: false,
+            // Enhanced state management
+            selectedElement: null,
+            zoomLevel: 1,
+            elementCount: 0,
+            diagramTitle: '',
+            lastModified: null,
+            viewChanged: 0
         });
         
         this.viewer = null;
@@ -72,6 +79,11 @@ export class BPMNOwlComponent extends Component {
                 this.viewer.destroy();
                 this.viewer = null;
             }
+            // Reset enhanced state
+            this.state.selectedElement = null;
+            this.state.elementCount = 0;
+            this.state.zoomLevel = 1;
+            this.state.diagramTitle = '';
         });
     }
 
@@ -122,6 +134,11 @@ export class BPMNOwlComponent extends Component {
             this.state.loaded = true;
             this.state.error = false;  // Ensure error state is cleared
             this.state.message = "";   // Clear success message for clean UI
+            this.state.lastModified = new Date().toISOString();
+            
+            // Update enhanced state
+            this.updateDiagramInfo();
+            
             console.log('BPMNOwlComponent: Diagram loaded successfully');
             
         } catch (error) {
@@ -129,43 +146,42 @@ export class BPMNOwlComponent extends Component {
             this.state.error = true;
             this.state.loaded = false;  // Reset loaded state on error
             this.state.message = `❌ Error: ${error.message}`;
-            
-            // If XML is invalid, show a default empty diagram
-            if (error.message.includes('XML') || error.message.includes('parse')) {
-                console.log('BPMNOwlComponent: Loading default empty diagram due to XML error');
-                try {
-                    const emptyBpmn = `<?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" 
-                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" 
-                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" 
-                  id="Definitions_1" 
-                  targetNamespace="http://bpmn.io/schema/bpmn">
-  <bpmn:process id="Process_1" isExecutable="true">
-    <bpmn:startEvent id="StartEvent_1"/>
-  </bpmn:process>
-  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
-    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_1">
-      <bpmndi:BPMNShape id="_BPMNShape_StartEvent_2" bpmnElement="StartEvent_1">
-        <dc:Bounds x="179" y="159" width="36" height="36"/>
-      </bpmndi:BPMNShape>
-    </bpmndi:BPMNPlane>
-  </bpmndi:BPMNDiagram>
-</bpmn:definitions>`;
-                    
-                    if (this.viewer) {
-                        await this.viewer.importXML(emptyBpmn);
-                        this.state.loaded = true;  // Mark as loaded with fallback
-                        this.state.error = false; // Clear error state for fallback
-                        this.state.message = "⚠️ Invalid XML - showing default diagram";
-                    }
-                } catch (fallbackError) {
-                    console.error('BPMNOwlComponent: Fallback diagram failed:', fallbackError);
-                    // Keep original error state if fallback fails
-                    this.state.message = `❌ Error: ${error.message} (Fallback also failed)`;
-                }
-            }
         } finally {
             this.state.loading = false;
+        }
+    }
+
+    updateDiagramInfo() {
+        if (!this.viewer) return;
+        
+        try {
+            // Get element count
+            const elementRegistry = this.viewer.get('elementRegistry');
+            const elements = elementRegistry.getAll();
+            this.state.elementCount = elements.length;
+            
+            // Get current zoom level
+            const canvas = this.viewer.get('canvas');
+            this.state.zoomLevel = Math.round(canvas.zoom() * 100) / 100;
+            
+            // Try to get diagram title from definitions
+            const definitions = this.viewer.getDefinitions();
+            if (definitions && definitions.name) {
+                this.state.diagramTitle = definitions.name;
+            } else if (definitions && definitions.rootElements && definitions.rootElements[0]) {
+                this.state.diagramTitle = definitions.rootElements[0].name || 'Untitled Process';
+            } else {
+                this.state.diagramTitle = 'BPMN Diagram';
+            }
+            
+            console.log('BPMNOwlComponent: Updated diagram info:', {
+                elements: this.state.elementCount,
+                zoom: this.state.zoomLevel,
+                title: this.state.diagramTitle
+            });
+            
+        } catch (error) {
+            console.warn('BPMNOwlComponent: Could not update diagram info:', error);
         }
     }
 }
