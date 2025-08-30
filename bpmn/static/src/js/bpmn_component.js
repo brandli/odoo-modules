@@ -143,8 +143,10 @@ export class BPMNOwlComponent extends Component {
                 <div t-if="!state.loaded" 
                      class="d-flex align-items-center justify-content-center h-100 text-muted">
                     <div class="text-center">
-                        <i class="fa fa-sitemap fa-3x mb-3"/>
-                        <div>Click "Load Diagram" to view BPMN</div>
+                        <i t-if="state.loading" class="fa fa-spinner fa-spin fa-3x mb-3"/>
+                        <i t-else="" class="fa fa-sitemap fa-3x mb-3"/>
+                        <div t-if="state.loading">Loading diagram...</div>
+                        <div t-else="">BPMN diagram will auto-load or click "Load Diagram"</div>
                     </div>
                 </div>
             </div>
@@ -168,7 +170,9 @@ export class BPMNOwlComponent extends Component {
             // Error boundary state
             isCircuitOpen: false,
             errorCount: 0,
-            recoveryInProgress: false
+            recoveryInProgress: false,
+            // Track current XML content for change detection
+            currentXMLContent: ''
         });
         
         // Comprehensive memory management tracking
@@ -194,7 +198,14 @@ export class BPMNOwlComponent extends Component {
         onMounted(() => {
             console.log('BPMNOwlComponent: Mounted successfully');
             this.isDestroyed = false;
-            // Component ready - no UI message needed
+            
+            // Phase 1: Auto-load diagram if XML data is present
+            this.safeSetTimeout(() => {
+                this.autoLoadDiagram();
+            }, 500); // Small delay to ensure DOM is fully ready
+            
+            // Start monitoring for XML content changes (for record navigation)
+            this.startXMLContentMonitoring();
         });
         
         onWillDestroy(() => {
@@ -678,6 +689,113 @@ export class BPMNOwlComponent extends Component {
             }
             
             return fallback;
+        }
+    }
+
+    /**
+     * Start monitoring XML content changes for record navigation
+     * This handles cases where user navigates between records using Next/Previous
+     */
+    startXMLContentMonitoring() {
+        console.log('BPMNOwlComponent: Starting XML content monitoring...');
+        
+        const checkForChanges = () => {
+            if (this.isDestroyed) return;
+            
+            const xmlField = document.querySelector('textarea[id*="bpmn_xml"]');
+            if (xmlField) {
+                const currentContent = xmlField.value.trim();
+                
+                // Check if content has changed
+                if (currentContent !== this.state.currentXMLContent) {
+                    console.log('BPMNOwlComponent: XML content changed, reloading diagram...');
+                    this.state.currentXMLContent = currentContent;
+                    
+                    if (currentContent) {
+                        // Auto-reload when content changes
+                        this.safeSetTimeout(() => {
+                            this.autoLoadDiagram();
+                        }, 300); // Small delay to ensure UI is stable
+                    } else {
+                        // No content, clear the diagram
+                        this.clearDiagram();
+                    }
+                }
+            }
+            
+            // Continue monitoring
+            this.safeSetTimeout(checkForChanges, 1000); // Check every second
+        };
+        
+        // Start the monitoring loop
+        this.safeSetTimeout(checkForChanges, 1000);
+    }
+
+    /**
+     * Clear the current diagram display
+     */
+    clearDiagram() {
+        console.log('BPMNOwlComponent: Clearing diagram...');
+        
+        if (this.viewer) {
+            try {
+                // Clean up existing viewer
+                for (const [eventName, handler] of this.eventListeners) {
+                    this.viewer.off(eventName, handler);
+                }
+                this.eventListeners.clear();
+                
+                this.viewer.destroy();
+                this.viewer = null;
+            } catch (error) {
+                console.warn('BPMNOwlComponent: Error clearing diagram:', error);
+            }
+        }
+        
+        // Reset state
+        this.state.loaded = false;
+        this.state.loading = false;
+        this.state.error = false;
+        this.state.message = "";
+        this.state.selectedElement = null;
+        this.state.elementCount = 0;
+        this.state.diagramTitle = '';
+    }
+
+    /**
+     * Phase 1: Auto-load diagram if XML data is present
+     * Called automatically on component mount and when content changes
+     */
+    async autoLoadDiagram() {
+        console.log('BPMNOwlComponent: Checking for auto-load...');
+        
+        // Check if component is destroyed
+        if (this.isDestroyed) {
+            console.log('BPMNOwlComponent: Auto-load skipped - component destroyed');
+            return;
+        }
+        
+        // Check if XML data is available
+        const xmlField = document.querySelector('textarea[id*="bpmn_xml"]');
+        if (xmlField && xmlField.value.trim()) {
+            const xmlContent = xmlField.value.trim();
+            console.log('BPMNOwlComponent: XML data found, auto-loading diagram...');
+            
+            // Update tracked content
+            this.state.currentXMLContent = xmlContent;
+            
+            try {
+                await this.loadDiagram();
+                console.log('BPMNOwlComponent: Auto-load completed successfully');
+            } catch (error) {
+                console.warn('BPMNOwlComponent: Auto-load failed:', error);
+                // Don't show error message for auto-load failures to avoid overwhelming user
+                // They can still manually click "Load Diagram" if needed
+            }
+        } else {
+            console.log('BPMNOwlComponent: No XML data found for auto-load');
+            // Update tracked content to empty
+            this.state.currentXMLContent = '';
         }
     }
 
