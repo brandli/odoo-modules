@@ -63,7 +63,7 @@ export class BPMNOwlComponent extends Component {
         
         onMounted(() => {
             console.log('BPMNOwlComponent: Mounted successfully');
-            this.state.message = "OWL Component ready. Click 'Load Diagram' to view BPMN.";
+            // Component ready - no UI message needed
         });
         
         onWillDestroy(() => {
@@ -77,9 +77,12 @@ export class BPMNOwlComponent extends Component {
 
     async loadDiagram() {
         console.log('BPMNOwlComponent: Loading diagram...');
+        
+        // Reset all states at start
         this.state.loading = true;
         this.state.error = false;
-        this.state.message = "Loading BPMN diagram...";
+        this.state.loaded = false;
+        this.state.message = "";  // No loading message for clean UI
         
         try {
             // Find BPMN XML data in the form
@@ -115,13 +118,16 @@ export class BPMNOwlComponent extends Component {
                 console.warn('BPMNOwlComponent: Import warnings:', result.warnings);
             }
             
+            // Success state
             this.state.loaded = true;
-            this.state.message = "✅ BPMN diagram loaded successfully!";
+            this.state.error = false;  // Ensure error state is cleared
+            this.state.message = "";   // Clear success message for clean UI
             console.log('BPMNOwlComponent: Diagram loaded successfully');
             
         } catch (error) {
             console.error('BPMNOwlComponent: Load error:', error);
             this.state.error = true;
+            this.state.loaded = false;  // Reset loaded state on error
             this.state.message = `❌ Error: ${error.message}`;
             
             // If XML is invalid, show a default empty diagram
@@ -148,10 +154,14 @@ export class BPMNOwlComponent extends Component {
                     
                     if (this.viewer) {
                         await this.viewer.importXML(emptyBpmn);
+                        this.state.loaded = true;  // Mark as loaded with fallback
+                        this.state.error = false; // Clear error state for fallback
                         this.state.message = "⚠️ Invalid XML - showing default diagram";
                     }
                 } catch (fallbackError) {
                     console.error('BPMNOwlComponent: Fallback diagram failed:', fallbackError);
+                    // Keep original error state if fallback fails
+                    this.state.message = `❌ Error: ${error.message} (Fallback also failed)`;
                 }
             }
         } finally {
