@@ -145,40 +145,274 @@ export class BPMNOwlComponent extends Component {
             viewChanged: 0
         });
         
+        // Comprehensive memory management tracking
         this.viewer = null;
+        this.eventListeners = new Map(); // Track all event listeners for cleanup
+        this.timers = new Set(); // Track all timers for cleanup
+        this.animationFrames = new Set(); // Track animation frames for cleanup
+        this.canvasContexts = new Set(); // Track canvas contexts for cleanup
+        this.observables = new Set(); // Track observables/subscriptions for cleanup
+        this.domReferences = new WeakMap(); // Weak references to prevent memory leaks
+        this.isDestroyed = false; // Prevent operations after destruction
         
         onMounted(() => {
             console.log('BPMNOwlComponent: Mounted successfully');
+            this.isDestroyed = false;
             // Component ready - no UI message needed
         });
         
         onWillDestroy(() => {
-            console.log('BPMNOwlComponent: Cleaning up...');
-            if (this.viewer) {
-                // Remove event listeners
-                this.viewer.off('element.click');
-                this.viewer.off('canvas.click');
-                this.viewer.off('canvas.viewbox.changed');
-                this.viewer.off('import.parse.start');
-                this.viewer.off('import.parse.complete');
-                this.viewer.off('import.render.start');
-                this.viewer.off('import.render.complete');
-                this.viewer.off('import.done');
+            console.log('BPMNOwlComponent: Starting comprehensive cleanup...');
+            this.isDestroyed = true;
+            this.performComprehensiveCleanup();
+        });
+    }
+
+    /**
+     * Performs comprehensive memory management cleanup as recommended by architecture
+     * Prevents memory leaks from event listeners, timers, canvas contexts, and DOM references
+     */
+    performComprehensiveCleanup() {
+        console.log('BPMNOwlComponent: Performing comprehensive cleanup...');
+        
+        // 1. Cancel all pending animation frames
+        for (const frameId of this.animationFrames) {
+            cancelAnimationFrame(frameId);
+            console.log('BPMNOwlComponent: Cancelled animation frame:', frameId);
+        }
+        this.animationFrames.clear();
+        
+        // 2. Clear all timers (timeouts and intervals)
+        for (const timerId of this.timers) {
+            clearTimeout(timerId);
+            clearInterval(timerId);
+            console.log('BPMNOwlComponent: Cleared timer:', timerId);
+        }
+        this.timers.clear();
+        
+        // 3. Clean up all observables and subscriptions
+        for (const observable of this.observables) {
+            if (observable && typeof observable.unsubscribe === 'function') {
+                observable.unsubscribe();
+                console.log('BPMNOwlComponent: Unsubscribed from observable');
+            }
+        }
+        this.observables.clear();
+        
+        // 4. Clean up all canvas contexts
+        for (const context of this.canvasContexts) {
+            try {
+                // Try different cleanup approaches based on context type
+                if (context && typeof context.clearRect === 'function') {
+                    // HTML5 Canvas context
+                    const canvas = context.canvas;
+                    if (canvas) {
+                        context.clearRect(0, 0, canvas.width, canvas.height);
+                        console.log('BPMNOwlComponent: Cleared HTML5 canvas context');
+                    }
+                } else if (context && context.remove && typeof context.remove === 'function') {
+                    // DOM element that can be removed
+                    context.remove();
+                    console.log('BPMNOwlComponent: Removed DOM canvas element');
+                } else if (context && context.innerHTML !== undefined) {
+                    // DOM element that can be cleared
+                    context.innerHTML = '';
+                    console.log('BPMNOwlComponent: Cleared DOM element content');
+                } else {
+                    console.log('BPMNOwlComponent: Canvas context type not recognized, skipping cleanup');
+                }
+            } catch (error) {
+                console.warn('BPMNOwlComponent: Error cleaning canvas context:', error);
+                // Continue with other cleanup even if one fails
+            }
+        }
+        this.canvasContexts.clear();
+        
+        // 5. Remove BPMN.js viewer and all its event listeners
+        if (this.viewer) {
+            try {
+                // Remove all tracked event listeners explicitly
+                for (const [eventName, handler] of this.eventListeners) {
+                    this.viewer.off(eventName, handler);
+                    console.log('BPMNOwlComponent: Removed event listener:', eventName);
+                }
+                this.eventListeners.clear();
                 
-                // Destroy viewer
+                // Additional BPMN.js cleanup with defensive programming
+                try {
+                    const eventBus = this.viewer.get('eventBus');
+                    if (eventBus && typeof eventBus.off === 'function') {
+                        // Remove any remaining listeners from event bus
+                        eventBus.off();
+                        console.log('BPMNOwlComponent: Cleared BPMN.js event bus');
+                    }
+                } catch (error) {
+                    console.warn('BPMNOwlComponent: Could not access BPMN.js event bus:', error);
+                }
+                
+                // Clean up internal BPMN.js services defensively
+                try {
+                    const canvas = this.viewer.get('canvas');
+                    if (canvas) {
+                        // Try to get canvas context for tracking (defensive)
+                        let canvasElement = null;
+                        
+                        if (canvas._svg && typeof canvas._svg.node === 'function') {
+                            canvasElement = canvas._svg.node();
+                        } else if (canvas._svg && canvas._svg.element) {
+                            canvasElement = canvas._svg.element;
+                        } else if (canvas._container) {
+                            canvasElement = canvas._container;
+                        }
+                        
+                        if (canvasElement) {
+                            this.canvasContexts.add(canvasElement);
+                            console.log('BPMNOwlComponent: Added canvas element to cleanup queue');
+                        }
+                    }
+                } catch (error) {
+                    console.warn('BPMNOwlComponent: Could not access BPMN.js canvas for cleanup:', error);
+                }
+                
+                // Destroy BPMN.js viewer instance
                 this.viewer.destroy();
+                console.log('BPMNOwlComponent: BPMN viewer destroyed');
+                
+            } catch (error) {
+                console.error('BPMNOwlComponent: Error during viewer cleanup:', error);
+            } finally {
                 this.viewer = null;
             }
-            // Reset enhanced state
-            this.state.selectedElement = null;
-            this.state.elementCount = 0;
-            this.state.zoomLevel = 1;
-            this.state.diagramTitle = '';
+        }
+        
+        // 6. Clear DOM references and container
+        if (this.containerRef && this.containerRef.el) {
+            // Clear container content
+            this.containerRef.el.innerHTML = '';
+            
+            // Remove any remaining event listeners from container
+            const container = this.containerRef.el;
+            const newContainer = container.cloneNode(false);
+            if (container.parentNode) {
+                container.parentNode.replaceChild(newContainer, container);
+            }
+        }
+        
+        // 7. Reset all state to prevent stale references
+        try {
+            Object.assign(this.state, {
+                loading: false,
+                loaded: false,
+                message: "",
+                error: false,
+                selectedElement: null,
+                zoomLevel: 1,
+                elementCount: 0,
+                diagramTitle: '',
+                lastModified: null,
+                viewChanged: 0
+            });
+        } catch (error) {
+            console.warn('BPMNOwlComponent: Error resetting state:', error);
+        }
+        
+        // 8. Clear WeakMap references
+        this.domReferences = new WeakMap();
+        
+        console.log('BPMNOwlComponent: Comprehensive cleanup completed');
+    }
+
+    /**
+     * Safe timer management methods for memory leak prevention
+     */
+    safeSetTimeout(callback, delay) {
+        if (this.isDestroyed) return null;
+        
+        const timerId = setTimeout(() => {
+            this.timers.delete(timerId);
+            if (!this.isDestroyed) {
+                callback();
+            }
+        }, delay);
+        
+        this.timers.add(timerId);
+        return timerId;
+    }
+
+    safeSetInterval(callback, delay) {
+        if (this.isDestroyed) return null;
+        
+        const intervalId = setInterval(() => {
+            if (this.isDestroyed) {
+                clearInterval(intervalId);
+                this.timers.delete(intervalId);
+                return;
+            }
+            callback();
+        }, delay);
+        
+        this.timers.add(intervalId);
+        return intervalId;
+    }
+
+    safeRequestAnimationFrame(callback) {
+        if (this.isDestroyed) return null;
+        
+        const frameId = requestAnimationFrame(() => {
+            this.animationFrames.delete(frameId);
+            if (!this.isDestroyed) {
+                callback();
+            }
         });
+        
+        this.animationFrames.add(frameId);
+        return frameId;
+    }
+
+    /**
+     * Safe canvas context management
+     */
+    trackCanvasContext(context) {
+        if (!context || this.isDestroyed) {
+            return;
+        }
+        
+        try {
+            // Validate that this is a trackable context
+            const isValidContext = 
+                (typeof context.clearRect === 'function') ||  // HTML5 Canvas context
+                (context.remove && typeof context.remove === 'function') ||  // DOM element
+                (context.innerHTML !== undefined);  // DOM element with innerHTML
+            
+            if (isValidContext) {
+                this.canvasContexts.add(context);
+                console.log('BPMNOwlComponent: Canvas context tracked for cleanup');
+            } else {
+                console.warn('BPMNOwlComponent: Context not trackable:', typeof context);
+            }
+        } catch (error) {
+            console.warn('BPMNOwlComponent: Error tracking canvas context:', error);
+        }
+    }
+
+    /**
+     * Safe observable subscription management
+     */
+    trackObservable(observable) {
+        if (observable && !this.isDestroyed) {
+            this.observables.add(observable);
+        }
+        return observable;
     }
 
     async loadDiagram() {
         console.log('BPMNOwlComponent: Loading diagram...');
+        
+        // Check if component is destroyed
+        if (this.isDestroyed) {
+            console.warn('BPMNOwlComponent: Cannot load diagram - component is destroyed');
+            return;
+        }
         
         // Reset all states at start
         this.state.loading = true;
@@ -202,22 +436,79 @@ export class BPMNOwlComponent extends Component {
                 throw new Error('BPMN.js library not loaded');
             }
 
-            // Clean up existing viewer
+            // Clean up existing viewer with comprehensive cleanup
             if (this.viewer) {
+                // Perform partial cleanup for existing viewer
+                for (const [eventName, handler] of this.eventListeners) {
+                    this.viewer.off(eventName, handler);
+                }
+                this.eventListeners.clear();
+                
                 this.viewer.destroy();
+                this.viewer = null;
             }
 
-            // Create new viewer
+            // Check again if component is destroyed during async operations
+            if (this.isDestroyed) {
+                console.warn('BPMNOwlComponent: Component destroyed during load operation');
+                return;
+            }
+
+            // Create new viewer with memory management
             this.viewer = new window.BpmnJS({
                 container: this.containerRef.el
             });
 
-            // Setup event bridging
+            // Track any canvas contexts created by BPMN.js (defensive approach)
+            try {
+                const canvas = this.viewer.get('canvas');
+                if (canvas) {
+                    // Try different ways to access canvas context safely
+                    let canvasContext = null;
+                    
+                    // Method 1: Check for SVG node function
+                    if (canvas._svg && typeof canvas._svg.node === 'function') {
+                        canvasContext = canvas._svg.node();
+                    }
+                    // Method 2: Check for direct SVG element
+                    else if (canvas._svg && canvas._svg.element) {
+                        canvasContext = canvas._svg.element;
+                    }
+                    // Method 3: Check for container element
+                    else if (canvas._container) {
+                        canvasContext = canvas._container;
+                    }
+                    
+                    if (canvasContext) {
+                        this.trackCanvasContext(canvasContext);
+                        console.log('BPMNOwlComponent: Canvas context tracked successfully');
+                    } else {
+                        console.log('BPMNOwlComponent: No trackable canvas context found');
+                    }
+                }
+            } catch (error) {
+                console.warn('BPMNOwlComponent: Could not track canvas context:', error);
+                // Continue without canvas tracking - not critical for functionality
+            }
+
+            // Setup event bridging with memory management
             this.setupEventBridge();
 
-            // Import the XML
+            // Import the XML with safety check
             console.log('BPMNOwlComponent: Importing XML...');
+            
+            if (this.isDestroyed) {
+                console.warn('BPMNOwlComponent: Component destroyed before import');
+                return;
+            }
+            
             const result = await this.viewer.importXML(xmlContent);
+            
+            // Final safety check after async operation
+            if (this.isDestroyed) {
+                console.warn('BPMNOwlComponent: Component destroyed after import');
+                return;
+            }
             
             if (result.warnings && result.warnings.length > 0) {
                 console.warn('BPMNOwlComponent: Import warnings:', result.warnings);
@@ -229,36 +520,65 @@ export class BPMNOwlComponent extends Component {
             this.state.message = "";   // Clear success message for clean UI
             this.state.lastModified = new Date().toISOString();
             
-            // Update enhanced state
-            this.updateDiagramInfo();
+            // Update enhanced state using safe animation frame
+            this.safeRequestAnimationFrame(() => {
+                this.updateDiagramInfo();
+            });
             
             console.log('BPMNOwlComponent: Diagram loaded successfully');
             
         } catch (error) {
             console.error('BPMNOwlComponent: Load error:', error);
-            this.state.error = true;
-            this.state.loaded = false;  // Reset loaded state on error
-            this.state.message = `❌ Error: ${error.message}`;
+            
+            // Only update state if component is not destroyed
+            if (!this.isDestroyed) {
+                this.state.error = true;
+                this.state.loaded = false;  // Reset loaded state on error
+                this.state.message = `❌ Error: ${error.message}`;
+            }
         } finally {
-            this.state.loading = false;
+            // Only update loading state if component is not destroyed
+            if (!this.isDestroyed) {
+                this.state.loading = false;
+            }
         }
     }
 
     setupEventBridge() {
-        if (!this.viewer) return;
+        if (!this.viewer || this.isDestroyed) return;
         
-        console.log('BPMNOwlComponent: Setting up event bridge...');
+        console.log('BPMNOwlComponent: Setting up event bridge with memory management...');
         
-        // Element selection events
-        this.viewer.on('element.click', (event) => {
+        // Helper function to safely add event listeners with tracking
+        const addTrackedListener = (eventName, handler) => {
+            if (this.isDestroyed) return;
+            
+            // Wrap handler to check if component is destroyed
+            const wrappedHandler = (...args) => {
+                if (!this.isDestroyed) {
+                    try {
+                        handler(...args);
+                    } catch (error) {
+                        console.error(`BPMNOwlComponent: Error in ${eventName} handler:`, error);
+                    }
+                }
+            };
+            
+            this.viewer.on(eventName, wrappedHandler);
+            this.eventListeners.set(eventName, wrappedHandler);
+            console.log('BPMNOwlComponent: Added tracked listener:', eventName);
+        };
+        
+        // Element selection events with memory management
+        addTrackedListener('element.click', (event) => {
             if (event.element && event.element.id) {
                 this.state.selectedElement = event.element.id;
                 console.log('BPMNOwlComponent: Element selected:', event.element.id);
             }
         });
         
-        // Clear selection when clicking canvas
-        this.viewer.on('canvas.click', (event) => {
+        // Clear selection when clicking canvas with memory management
+        addTrackedListener('canvas.click', (event) => {
             // Only clear if we clicked on the canvas itself, not an element
             if (!event.element || event.element.type === 'bpmn:Process') {
                 this.state.selectedElement = null;
@@ -266,50 +586,74 @@ export class BPMNOwlComponent extends Component {
             }
         });
         
-        // Zoom/pan events
-        this.viewer.on('canvas.viewbox.changed', () => {
-            if (this.viewer) {
-                const canvas = this.viewer.get('canvas');
-                const newZoom = Math.round(canvas.zoom() * 100) / 100;
-                if (this.state.zoomLevel !== newZoom) {
-                    this.state.zoomLevel = newZoom;
-                    this.state.viewChanged = Date.now();
-                    console.log('BPMNOwlComponent: Zoom changed to:', newZoom);
-                }
+        // Zoom/pan events with debouncing and memory management
+        let zoomUpdateTimer = null;
+        addTrackedListener('canvas.viewbox.changed', () => {
+            if (this.isDestroyed) return;
+            
+            // Clear existing timer
+            if (zoomUpdateTimer) {
+                clearTimeout(zoomUpdateTimer);
+                this.timers.delete(zoomUpdateTimer);
             }
+            
+            // Debounce zoom updates as recommended by architecture
+            zoomUpdateTimer = setTimeout(() => {
+                if (!this.isDestroyed && this.viewer) {
+                    try {
+                        const canvas = this.viewer.get('canvas');
+                        const newZoom = Math.round(canvas.zoom() * 100) / 100;
+                        if (this.state.zoomLevel !== newZoom) {
+                            this.state.zoomLevel = newZoom;
+                            this.state.viewChanged = Date.now();
+                            console.log('BPMNOwlComponent: Zoom changed to:', newZoom);
+                        }
+                    } catch (error) {
+                        console.error('BPMNOwlComponent: Error updating zoom:', error);
+                    }
+                }
+                this.timers.delete(zoomUpdateTimer);
+                zoomUpdateTimer = null;
+            }, 150); // 150ms debounce as recommended
+            
+            this.timers.add(zoomUpdateTimer);
         });
         
-        // Import events (for better loading state management)
-        this.viewer.on('import.parse.start', () => {
+        // Import events for better loading state management with memory tracking
+        addTrackedListener('import.parse.start', () => {
             console.log('BPMNOwlComponent: Starting XML parse...');
         });
         
-        this.viewer.on('import.parse.complete', () => {
+        addTrackedListener('import.parse.complete', () => {
             console.log('BPMNOwlComponent: XML parse complete');
         });
         
-        this.viewer.on('import.render.start', () => {
+        addTrackedListener('import.render.start', () => {
             console.log('BPMNOwlComponent: Starting diagram render...');
         });
         
-        this.viewer.on('import.render.complete', () => {
+        addTrackedListener('import.render.complete', () => {
             console.log('BPMNOwlComponent: Diagram render complete');
         });
         
-        this.viewer.on('import.done', (event) => {
+        addTrackedListener('import.done', (event) => {
             console.log('BPMNOwlComponent: Import done event received');
-            if (event.error) {
-                console.error('BPMNOwlComponent: Import error from event:', event.error);
-            } else {
-                console.log('BPMNOwlComponent: Import successful via event');
-            }
+            
+            // Use animation frame for smooth UI updates
+            const frameId = requestAnimationFrame(() => {
+                if (!this.isDestroyed) {
+                    this.updateDiagramInfo();
+                }
+                this.animationFrames.delete(frameId);
+            });
+            this.animationFrames.add(frameId);
         });
         
-        console.log('BPMNOwlComponent: Event bridge setup complete');
+        console.log('BPMNOwlComponent: Event bridge setup completed with tracking');
     }
 
     updateDiagramInfo() {
-        if (!this.viewer) return;
+        if (!this.viewer || this.isDestroyed) return;
         
         try {
             // Get element count
@@ -342,48 +686,66 @@ export class BPMNOwlComponent extends Component {
         }
     }
 
-    // Advanced interaction methods
+    // Advanced interaction methods with memory management
     async zoomFit() {
-        if (!this.viewer || !this.state.loaded) return;
+        if (!this.viewer || !this.state.loaded || this.isDestroyed) return;
         
         try {
             const canvas = this.viewer.get('canvas');
             canvas.zoom('fit-viewport');
-            this.state.zoomLevel = Math.round(canvas.zoom() * 100) / 100;
-            this.state.viewChanged = Date.now();
-            console.log('BPMNOwlComponent: Zoom fit applied, new zoom:', this.state.zoomLevel);
+            
+            // Use safe animation frame for UI updates
+            this.safeRequestAnimationFrame(() => {
+                if (this.viewer && !this.isDestroyed) {
+                    this.state.zoomLevel = Math.round(canvas.zoom() * 100) / 100;
+                    this.state.viewChanged = Date.now();
+                    console.log('BPMNOwlComponent: Zoom fit applied, new zoom:', this.state.zoomLevel);
+                }
+            });
         } catch (error) {
             console.error('BPMNOwlComponent: Zoom fit failed:', error);
         }
     }
 
     async zoomIn() {
-        if (!this.viewer || !this.state.loaded) return;
+        if (!this.viewer || !this.state.loaded || this.isDestroyed) return;
         
         try {
             const canvas = this.viewer.get('canvas');
             const currentZoom = canvas.zoom();
             const newZoom = Math.min(4.0, currentZoom + 0.2); // Max zoom 4x
             canvas.zoom(newZoom);
-            this.state.zoomLevel = Math.round(newZoom * 100) / 100;
-            this.state.viewChanged = Date.now();
-            console.log('BPMNOwlComponent: Zoomed in to:', this.state.zoomLevel);
+            
+            // Use safe animation frame for UI updates
+            this.safeRequestAnimationFrame(() => {
+                if (!this.isDestroyed) {
+                    this.state.zoomLevel = Math.round(newZoom * 100) / 100;
+                    this.state.viewChanged = Date.now();
+                    console.log('BPMNOwlComponent: Zoomed in to:', this.state.zoomLevel);
+                }
+            });
         } catch (error) {
             console.error('BPMNOwlComponent: Zoom in failed:', error);
         }
     }
 
     async zoomOut() {
-        if (!this.viewer || !this.state.loaded) return;
+        if (!this.viewer || !this.state.loaded || this.isDestroyed) return;
         
         try {
             const canvas = this.viewer.get('canvas');
             const currentZoom = canvas.zoom();
             const newZoom = Math.max(0.1, currentZoom - 0.2); // Min zoom 0.1x
             canvas.zoom(newZoom);
-            this.state.zoomLevel = Math.round(newZoom * 100) / 100;
-            this.state.viewChanged = Date.now();
-            console.log('BPMNOwlComponent: Zoomed out to:', this.state.zoomLevel);
+            
+            // Use safe animation frame for UI updates
+            this.safeRequestAnimationFrame(() => {
+                if (!this.isDestroyed) {
+                    this.state.zoomLevel = Math.round(newZoom * 100) / 100;
+                    this.state.viewChanged = Date.now();
+                    console.log('BPMNOwlComponent: Zoomed out to:', this.state.zoomLevel);
+                }
+            });
         } catch (error) {
             console.error('BPMNOwlComponent: Zoom out failed:', error);
         }
