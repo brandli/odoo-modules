@@ -24,10 +24,10 @@
             <field name="model">ir.module.module</field>
             <field name="inherit_id" ref="base.view_module_filter"/>
             <field name="arch" type="xml">
-                <filter name="extra" position="after">
-                    <filter name="hide_enterprise" string="Hide Enterprise" domain="[('to_buy', '=', False)]" default="True"/>
+                <xpath expr="//filter[@name='extra']" position="after">
+                    <filter name="hide_enterprise" string="Hide Enterprise" domain="[('to_buy', '=', False)]"/>
                     <filter name="show_enterprise" string="Show Enterprise" domain="[('to_buy', '=', True)]"/>
-                </filter>
+                </xpath>
             </field>
         </record>
 
@@ -37,9 +37,9 @@
             <field name="model">ir.module.module</field>
             <field name="inherit_id" ref="base.view_module_filter"/>
             <field name="arch" type="xml">
-                <filter string="Status" position="after">
+                <xpath expr="//filter[@name='state']" position="after">
                     <filter string="Odoo Enterprise Module" name="enterprise" domain="[]" context="{'group_by':'to_buy'}"/>
-                </filter>
+                </xpath>
             </field>
         </record>
     </data>
