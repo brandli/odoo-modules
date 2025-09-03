@@ -35,7 +35,90 @@ class BPMNProcess(models.Model):
         """Override create to provide default BPMN XML if none provided"""
         if not vals.get('bpmn_xml'):
             vals['bpmn_xml'] = self._get_default_bpmn_xml(vals.get('name', 'New Process'))
+        else:
+            # Validate BPMN XML format
+            self._validate_bpmn_xml(vals['bpmn_xml'])
         return super().create(vals)
+    
+    def write(self, vals):
+        """Override write to validate BPMN XML when updated"""
+        if 'bpmn_xml' in vals and vals['bpmn_xml']:
+            self._validate_bpmn_xml(vals['bpmn_xml'])
+        return super().write(vals)
+    
+    def _validate_bpmn_xml(self, xml_content):
+        """Validate BPMN XML format to ensure database integrity"""
+        if not xml_content or not xml_content.strip():
+            return True  # Empty content is allowed
+            
+        xml_content = xml_content.strip()
+        
+        # Basic validation checks
+        if not xml_content.startswith('<?xml'):
+            raise ValueError("BPMN XML must start with XML declaration")
+            
+        if 'bpmn:definitions' not in xml_content and '<definitions' not in xml_content:
+            raise ValueError("BPMN XML must contain valid BPMN definitions element")
+            
+        # Check for required BPMN namespace
+        required_namespaces = [
+            'http://www.omg.org/spec/BPMN/20100524/MODEL',
+            'bpmn:',
+            'bpmndi:'
+        ]
+        
+        has_namespace = any(ns in xml_content for ns in required_namespaces)
+        if not has_namespace:
+            raise ValueError("BPMN XML must contain valid BPMN 2.0 namespace")
+            
+        return True
+    
+    @api.model
+    def get_bpmn_data(self, record_id):
+        """API method to retrieve BPMN data for JavaScript components"""
+        try:
+            record = self.browse(record_id)
+            if not record.exists():
+                return {
+                    'success': False,
+                    'error': f'BPMN process record {record_id} not found'
+                }
+            
+            return {
+                'success': True,
+                'data': {
+                    'id': record.id,
+                    'name': record.name,
+                    'description': record.description,
+                    'bpmn_xml': record.bpmn_xml,
+                    'active': record.active,
+                    'last_modified': record.write_date.isoformat() if record.write_date else None,
+                }
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Error retrieving BPMN data: {str(e)}'
+            }
+    
+    def get_bpmn_xml_safe(self):
+        """Get BPMN XML with error handling for frontend"""
+        try:
+            self.ensure_one()
+            return {
+                'success': True,
+                'xml': self.bpmn_xml or '',
+                'record_id': self.id,
+                'name': self.name,
+                'last_modified': self.write_date.isoformat() if self.write_date else None,
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e),
+                'xml': '',
+                'record_id': self.id if hasattr(self, 'id') else None,
+            }
     
     def _get_default_bpmn_xml(self, process_name):
         """Generate a basic BPMN XML template"""

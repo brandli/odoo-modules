@@ -16,17 +16,17 @@ export class BPMNOwlComponent extends Component {
     static template = xml`
         <div class="bpmn-owl-component">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5 class="mb-0">BPMN Diagram Viewer (OWL)</h5>
+                <h5 class="mb-0">BPMN Diagram Viewer (Database-First)</h5>
                 <div class="btn-toolbar" role="toolbar">
                     <div class="btn-group me-2" role="group">
                         <button type="button" 
                                 class="btn btn-primary btn-sm" 
-                                t-on-click="loadDiagram"
+                                t-on-click="loadDiagramFromDatabase"
                                 t-att-disabled="state.loading">
                             <i t-if="state.loading" class="fa fa-spinner fa-spin"/>
-                            <i t-else="" class="fa fa-refresh"/>
-                            <span t-if="state.loading"> Loading...</span>
-                            <span t-else=""> Load Diagram</span>
+                            <i t-else="" class="fa fa-database"/>
+                            <span t-if="state.loading"> Loading from DB...</span>
+                            <span t-else=""> Load from Database</span>
                         </button>
                     </div>
                     <div class="btn-group" role="group" t-if="state.loaded">
@@ -87,6 +87,29 @@ export class BPMNOwlComponent extends Component {
                 </div>
             </div>
             
+            <!-- Database Connection Status -->
+            <div class="small text-muted mb-2 d-flex justify-content-between align-items-center">
+                <div>
+                    <span t-if="state.dbConnected">
+                        <i class="fa fa-database text-success"/> Database Connected
+                        <span t-if="state.recordId" class="ms-2">
+                            (Record ID: <code t-esc="state.recordId"/>)
+                        </span>
+                    </span>
+                    <span t-else="">
+                        <i class="fa fa-database text-warning"/> Database Not Connected
+                    </span>
+                    <span t-if="state.lastSyncTime" class="ms-3">
+                        Last Sync: <span t-esc="new Date(state.lastSyncTime).toLocaleTimeString()"/>
+                    </span>
+                </div>
+                <div>
+                    <span t-if="state.fieldValue">
+                        Content: <span t-esc="Math.round(state.fieldValue.length / 1024)"/>KB
+                    </span>
+                </div>
+            </div>
+            
             <!-- Status bar -->
             <div t-if="state.loaded" class="small text-muted mb-2 d-flex justify-content-between">
                 <div>
@@ -144,9 +167,15 @@ export class BPMNOwlComponent extends Component {
                      class="d-flex align-items-center justify-content-center h-100 text-muted">
                     <div class="text-center">
                         <i t-if="state.loading" class="fa fa-spinner fa-spin fa-3x mb-3"/>
+                        <i t-elif="!state.dbConnected" class="fa fa-database fa-3x mb-3 text-warning"/>
                         <i t-else="" class="fa fa-sitemap fa-3x mb-3"/>
-                        <div t-if="state.loading">Loading diagram...</div>
-                        <div t-else="">BPMN diagram will auto-load or click "Load Diagram"</div>
+                        <div t-if="state.loading">Loading diagram from database...</div>
+                        <div t-elif="!state.dbConnected">Database connection required</div>
+                        <div t-elif="!state.recordId">No record ID detected</div>
+                        <div t-else="">BPMN diagram will auto-load from database or click "Load from Database"</div>
+                        <div t-if="state.dbConnected and state.recordId" class="small mt-2">
+                            Connected to Record ID: <code t-esc="state.recordId"/>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -160,13 +189,18 @@ export class BPMNOwlComponent extends Component {
             loaded: false,
             message: "",
             error: false,
-            // Enhanced state management
+            // Enhanced state management with database integration
             selectedElement: null,
             zoomLevel: 1,
             elementCount: 0,
             diagramTitle: '',
             lastModified: null,
             viewChanged: 0,
+            // Database integration state
+            recordId: null,
+            fieldValue: '',
+            dbConnected: false,
+            lastSyncTime: null,
             // Error boundary state
             isCircuitOpen: false,
             errorCount: 0,
@@ -196,21 +230,34 @@ export class BPMNOwlComponent extends Component {
         this.baseRetryDelay = 1000; // Base delay for exponential backoff (1 second)
         
         onMounted(() => {
-            console.log('BPMNOwlComponent: Mounted successfully');
+            console.log('BPMNOwlComponent: Mounted successfully with database-first approach');
             this.isDestroyed = false;
             
-            // Phase 1: Auto-load diagram if XML data is present
+            // Make component accessible for debugging
+            window.bpmnDebug = this;
+            console.log('🔧 Debug: Component available as window.bpmnDebug - call window.bpmnDebug.debugConnectionStatus() for diagnostics');
+            
+            // Initialize database connection and field monitoring
+            this.initializeDatabaseConnection();
+            
+            // Phase 1: Auto-load diagram if XML data is present in database
             this.safeSetTimeout(() => {
-                this.autoLoadDiagram();
+                this.autoLoadDiagramFromDatabase();
             }, 500); // Small delay to ensure DOM is fully ready
             
-            // Start monitoring for XML content changes (for record navigation)
-            this.startXMLContentMonitoring();
+            // Start monitoring for database field changes
+            this.startDatabaseFieldMonitoring();
         });
         
         onWillDestroy(() => {
             console.log('BPMNOwlComponent: Starting comprehensive cleanup...');
             this.isDestroyed = true;
+            
+            // Clean up debug reference
+            if (window.bpmnDebug === this) {
+                delete window.bpmnDebug;
+            }
+            
             this.performComprehensiveCleanup();
         });
     }
@@ -693,42 +740,324 @@ export class BPMNOwlComponent extends Component {
     }
 
     /**
-     * Start monitoring XML content changes for record navigation
+     * Initialize database connection and detect current record
+     */
+    initializeDatabaseConnection() {
+        console.log('BPMNOwlComponent: Initializing database connection...');
+        console.log('BPMNOwlComponent: Current URL:', window.location.href);
+        
+        try {
+            // Extract record ID from multiple sources
+            const recordId = this.detectRecordId();
+            
+            if (recordId) {
+                this.state.recordId = parseInt(recordId);
+                this.state.dbConnected = true;
+                console.log('BPMNOwlComponent: Database connection established, record ID:', recordId);
+            } else {
+                console.warn('BPMNOwlComponent: Could not determine record ID - checking alternatives...');
+                
+                // Fallback: Wait a moment and try again (for dynamic loading)
+                this.safeSetTimeout(() => {
+                    const fallbackRecordId = this.detectRecordId();
+                    if (fallbackRecordId) {
+                        this.state.recordId = parseInt(fallbackRecordId);
+                        this.state.dbConnected = true;
+                        console.log('BPMNOwlComponent: Database connection established via fallback, record ID:', fallbackRecordId);
+                    } else {
+                        this.state.dbConnected = false;
+                        console.warn('BPMNOwlComponent: Still could not determine record ID after fallback');
+                        
+                        // Final fallback: Check if we have BPMN XML content anyway
+                        const xmlContent = this.getDatabaseFieldValue();
+                        if (xmlContent) {
+                            console.log('BPMNOwlComponent: No record ID but found XML content, enabling limited mode');
+                            this.state.dbConnected = true; // Enable limited functionality
+                            this.state.recordId = null; // Mark as unknown record
+                        } else {
+                            this.state.dbConnected = false;
+                        }
+                    }
+                }, 1000);
+            }
+        } catch (error) {
+            console.error('BPMNOwlComponent: Database connection failed:', error);
+            this.state.dbConnected = false;
+        }
+    }
+
+    /**
+     * Comprehensive record ID detection with multiple strategies
+     */
+    detectRecordId() {
+        console.log('BPMNOwlComponent: Attempting to detect record ID...');
+        console.log('BPMNOwlComponent: Current URL:', window.location.href);
+        
+        // Strategy 1: Extract from URL path (most common in Odoo)
+        // Handles URLs like: /odoo/action-171/2 or /web#id=2&action=171
+        const urlPath = window.location.pathname;
+        const urlPathMatch = urlPath.match(/\/(\d+)$/); // Match number at end of path
+        if (urlPathMatch) {
+            const recordId = urlPathMatch[1];
+            console.log('BPMNOwlComponent: Found record ID in URL path:', recordId);
+            return recordId;
+        }
+        
+        // Strategy 2: URL parameters (traditional ?id=123)
+        const urlParams = new URLSearchParams(window.location.search);
+        let recordId = urlParams.get('id');
+        if (recordId) {
+            console.log('BPMNOwlComponent: Found record ID in URL params:', recordId);
+            return recordId;
+        }
+        
+        // Strategy 3: Hash-based URLs (Odoo web client) - #id=123
+        const hash = window.location.hash;
+        if (hash) {
+            const hashMatch = hash.match(/[&#]id=(\d+)/);
+            if (hashMatch) {
+                recordId = hashMatch[1];
+                console.log('BPMNOwlComponent: Found record ID in hash:', recordId);
+                return recordId;
+            }
+        }
+        
+        // Strategy 4: Form view data attributes
+        const formView = document.querySelector('.o_form_view');
+        if (formView) {
+            const resId = formView.getAttribute('data-res-id') || 
+                         formView.getAttribute('data-record-id') ||
+                         formView.dataset.resId ||
+                         formView.dataset.recordId;
+            if (resId) {
+                console.log('BPMNOwlComponent: Found record ID in form view:', resId);
+                return resId;
+            }
+        }
+        
+        // Strategy 5: Legacy DOM extraction
+        recordId = this.extractRecordIdFromDOM();
+        if (recordId) {
+            console.log('BPMNOwlComponent: Found record ID via legacy DOM extraction:', recordId);
+            return recordId;
+        }
+        
+        console.log('BPMNOwlComponent: No record ID found in URL or DOM');
+        return null;
+    }
+
+    /**
+     * Extract record ID from DOM context (legacy method)
+     */
+    extractRecordIdFromDOM() {
+        console.log('BPMNOwlComponent: Attempting legacy DOM record ID extraction...');
+        
+        // Method 1: Look for data-res-id attribute
+        const formElement = document.querySelector('[data-res-id]');
+        if (formElement) {
+            const resId = formElement.getAttribute('data-res-id');
+            console.log('BPMNOwlComponent: Found data-res-id:', resId);
+            return resId;
+        }
+        
+        // Method 2: Look for hidden input with record ID
+        const recordInput = document.querySelector('input[name="id"]');
+        if (recordInput && recordInput.value) {
+            console.log('BPMNOwlComponent: Found record input value:', recordInput.value);
+            return recordInput.value;
+        }
+        
+        // Method 3: Extract from form action URL
+        const form = document.querySelector('form');
+        if (form && form.action) {
+            const match = form.action.match(/id=(\d+)/);
+            if (match) {
+                console.log('BPMNOwlComponent: Found record ID in form action:', match[1]);
+                return match[1];
+            }
+        }
+        
+        // Method 4: Look for the BPMN XML field and extract from its context
+        const xmlField = document.querySelector('textarea[id*="bpmn_xml"]');
+        if (xmlField) {
+            console.log('BPMNOwlComponent: Found XML field, checking for record context...');
+            
+            // Check if field has record ID in data attributes
+            if (xmlField.dataset.recordId) {
+                console.log('BPMNOwlComponent: Found record ID in XML field dataset:', xmlField.dataset.recordId);
+                return xmlField.dataset.recordId;
+            }
+            
+            // Look for parent with record context
+            const recordContainer = xmlField.closest('[data-record-id]') ||
+                                  xmlField.closest('[data-res-id]') ||
+                                  xmlField.closest('.o_form_view');
+            if (recordContainer) {
+                const recordId = recordContainer.getAttribute('data-record-id') ||
+                               recordContainer.getAttribute('data-res-id') ||
+                               recordContainer.dataset.recordId ||
+                               recordContainer.dataset.resId;
+                if (recordId) {
+                    console.log('BPMNOwlComponent: Found record ID in XML field container:', recordId);
+                    return recordId;
+                }
+            }
+        }
+        
+        // Method 5: Look for Odoo field widgets with record context
+        const fieldWidget = document.querySelector('.o_field_widget[data-record-id]') ||
+                           document.querySelector('.o_field_widget[data-res-id]');
+        if (fieldWidget) {
+            const recordId = fieldWidget.getAttribute('data-record-id') ||
+                           fieldWidget.getAttribute('data-res-id');
+            if (recordId) {
+                console.log('BPMNOwlComponent: Found record ID in field widget:', recordId);
+                return recordId;
+            }
+        }
+        
+        console.log('BPMNOwlComponent: Legacy DOM extraction failed');
+        return null;
+    }
+
+    /**
+     * Debug helper method - call from browser console to diagnose connection issues
+     */
+    debugConnectionStatus() {
+        console.group('🔍 BPMN Component Debug Information');
+        
+        console.log('📍 Current URL:', window.location.href);
+        console.log('� URL Path:', window.location.pathname);
+        console.log('�🔍 URL Search Params:', window.location.search);
+        console.log('🔍 URL Hash:', window.location.hash);
+        
+        // Test URL path extraction
+        const urlPath = window.location.pathname;
+        const urlPathMatch = urlPath.match(/\/(\d+)$/);
+        console.log('🎯 URL Path Record ID Detection:', urlPathMatch ? urlPathMatch[1] : 'Not found');
+        
+        console.log('🎯 Component State:');
+        console.log('  - DB Connected:', this.state.dbConnected);
+        console.log('  - Record ID:', this.state.recordId);
+        console.log('  - Field Value Length:', this.state.fieldValue?.length || 0);
+        console.log('  - Last Sync:', this.state.lastSyncTime);
+        
+        console.log('🔍 DOM Analysis:');
+        const xmlField = document.querySelector('textarea[id*="bpmn_xml"]');
+        console.log('  - XML Field Found:', !!xmlField);
+        console.log('  - XML Field Value Length:', xmlField?.value?.length || 0);
+        
+        console.log('🎯 Record ID Detection Results:');
+        const detectedId = this.detectRecordId();
+        console.log('  - Detected ID:', detectedId);
+        
+        console.log('📊 Field Content Sample:');
+        const content = this.getDatabaseFieldValue();
+        if (content) {
+            console.log('  - Content Length:', content.length);
+            console.log('  - Content Preview:', content.substring(0, 200) + '...');
+            console.log('  - Is Valid BPMN:', content.includes('bpmn:definitions') || content.includes('<definitions'));
+        } else {
+            console.log('  - No content found');
+        }
+        
+        console.groupEnd();
+        
+        return {
+            url: window.location.href,
+            urlPath: window.location.pathname,
+            urlPathRecordId: urlPathMatch ? urlPathMatch[1] : null,
+            dbConnected: this.state.dbConnected,
+            recordId: this.state.recordId,
+            hasXmlField: !!xmlField,
+            hasContent: !!content,
+            contentLength: content?.length || 0,
+            detectedId: detectedId
+        };
+    }
+
+    /**
+     * Start monitoring database field changes for record navigation
      * This handles cases where user navigates between records using Next/Previous
      */
-    startXMLContentMonitoring() {
-        console.log('BPMNOwlComponent: Starting XML content monitoring...');
+    startDatabaseFieldMonitoring() {
+        console.log('BPMNOwlComponent: Starting database field monitoring...');
         
-        const checkForChanges = () => {
+        const checkForDatabaseChanges = () => {
             if (this.isDestroyed) return;
             
-            const xmlField = document.querySelector('textarea[id*="bpmn_xml"]');
-            if (xmlField) {
-                const currentContent = xmlField.value.trim();
+            try {
+                // Get current field value from database field
+                const currentFieldValue = this.getDatabaseFieldValue();
+                const currentRecordId = this.getCurrentRecordId();
                 
-                // Check if content has changed
-                if (currentContent !== this.state.currentXMLContent) {
-                    console.log('BPMNOwlComponent: XML content changed, reloading diagram...');
-                    this.state.currentXMLContent = currentContent;
+                // Check if record ID changed (navigation)
+                if (currentRecordId !== this.state.recordId) {
+                    console.log('BPMNOwlComponent: Record navigation detected:', this.state.recordId, '→', currentRecordId);
+                    this.state.recordId = currentRecordId;
+                    this.state.fieldValue = currentFieldValue;
+                    this.state.lastSyncTime = new Date().toISOString();
                     
-                    if (currentContent) {
-                        // Auto-reload when content changes
+                    if (currentFieldValue) {
                         this.safeSetTimeout(() => {
-                            this.autoLoadDiagram();
-                        }, 300); // Small delay to ensure UI is stable
+                            this.autoLoadDiagramFromDatabase();
+                        }, 300);
                     } else {
-                        // No content, clear the diagram
                         this.clearDiagram();
                     }
                 }
+                // Check if field content changed for same record
+                else if (currentFieldValue !== this.state.fieldValue) {
+                    console.log('BPMNOwlComponent: Database field changed for record', currentRecordId);
+                    this.state.fieldValue = currentFieldValue;
+                    this.state.lastSyncTime = new Date().toISOString();
+                    
+                    if (currentFieldValue) {
+                        this.safeSetTimeout(() => {
+                            this.autoLoadDiagramFromDatabase();
+                        }, 300);
+                    } else {
+                        this.clearDiagram();
+                    }
+                }
+                
+            } catch (error) {
+                console.warn('BPMNOwlComponent: Error monitoring database changes:', error);
             }
             
             // Continue monitoring
-            this.safeSetTimeout(checkForChanges, 1000); // Check every second
+            this.safeSetTimeout(checkForDatabaseChanges, 1000); // Check every second
         };
         
         // Start the monitoring loop
-        this.safeSetTimeout(checkForChanges, 1000);
+        this.safeSetTimeout(checkForDatabaseChanges, 1000);
+    }
+
+    /**
+     * Get current record ID from various sources
+     */
+    getCurrentRecordId() {
+        // Use the enhanced detection method
+        const recordId = this.detectRecordId();
+        return recordId ? parseInt(recordId) : null;
+    }
+
+    /**
+     * Get current database field value
+     */
+    getDatabaseFieldValue() {
+        const xmlField = document.querySelector('textarea[id*="bpmn_xml"]');
+        return xmlField ? xmlField.value.trim() : '';
+    }
+
+    /**
+     * Start monitoring XML content changes for record navigation (Legacy method for backward compatibility)
+     * This handles cases where user navigates between records using Next/Previous
+     */
+    startXMLContentMonitoring() {
+        // Redirect to new database-first monitoring
+        console.log('BPMNOwlComponent: Redirecting to database-first monitoring...');
+        this.startDatabaseFieldMonitoring();
     }
 
     /**
@@ -763,11 +1092,11 @@ export class BPMNOwlComponent extends Component {
     }
 
     /**
-     * Phase 1: Auto-load diagram if XML data is present
-     * Called automatically on component mount and when content changes
+     * Phase 1: Auto-load diagram from database if XML data is present
+     * Called automatically on component mount and when database content changes
      */
-    async autoLoadDiagram() {
-        console.log('BPMNOwlComponent: Checking for auto-load...');
+    async autoLoadDiagramFromDatabase() {
+        console.log('BPMNOwlComponent: Checking for auto-load from database...');
         
         // Check if component is destroyed
         if (this.isDestroyed) {
@@ -775,32 +1104,52 @@ export class BPMNOwlComponent extends Component {
             return;
         }
         
-        // Check if XML data is available
-        const xmlField = document.querySelector('textarea[id*="bpmn_xml"]');
-        if (xmlField && xmlField.value.trim()) {
-            const xmlContent = xmlField.value.trim();
-            console.log('BPMNOwlComponent: XML data found, auto-loading diagram...');
+        // Check database connection
+        if (!this.state.dbConnected || !this.state.recordId) {
+            console.log('BPMNOwlComponent: No database connection or record ID available');
+            return;
+        }
+        
+        // Get XML data from database field
+        const xmlContent = this.getDatabaseFieldValue();
+        if (xmlContent) {
+            console.log('BPMNOwlComponent: XML data found in database, auto-loading diagram...');
+            console.log('BPMNOwlComponent: Record ID:', this.state.recordId, 'Content length:', xmlContent.length);
             
             // Update tracked content
             this.state.currentXMLContent = xmlContent;
+            this.state.fieldValue = xmlContent;
             
             try {
-                await this.loadDiagram();
-                console.log('BPMNOwlComponent: Auto-load completed successfully');
+                await this.loadDiagramFromDatabase();
+                console.log('BPMNOwlComponent: Auto-load from database completed successfully');
             } catch (error) {
-                console.warn('BPMNOwlComponent: Auto-load failed:', error);
+                console.warn('BPMNOwlComponent: Auto-load from database failed:', error);
                 // Don't show error message for auto-load failures to avoid overwhelming user
-                // They can still manually click "Load Diagram" if needed
+                // They can still manually click "Load from Database" if needed
             }
         } else {
-            console.log('BPMNOwlComponent: No XML data found for auto-load');
+            console.log('BPMNOwlComponent: No XML data found in database for auto-load');
             // Update tracked content to empty
             this.state.currentXMLContent = '';
+            this.state.fieldValue = '';
         }
     }
 
-    async loadDiagram() {
-        console.log('BPMNOwlComponent: Loading diagram with error boundary protection...');
+    /**
+     * Legacy auto-load method for backward compatibility
+     */
+    async autoLoadDiagram() {
+        // Redirect to database-first approach
+        console.log('BPMNOwlComponent: Redirecting to database-first auto-load...');
+        await this.autoLoadDiagramFromDatabase();
+    }
+
+    /**
+     * Load diagram from database with enhanced error handling and validation
+     */
+    async loadDiagramFromDatabase() {
+        console.log('BPMNOwlComponent: Loading diagram from database with error boundary protection...');
         
         // Check circuit breaker before attempting operation
         if (this.isCircuitBreakerOpen()) {
@@ -823,14 +1172,27 @@ export class BPMNOwlComponent extends Component {
                 this.state.loaded = false;
                 this.state.message = "";
                 
-                // Validate preconditions
-                const xmlField = document.querySelector('textarea[id*="bpmn_xml"]');
-                if (!xmlField || !xmlField.value.trim()) {
-                    throw new Error('No BPMN XML data found. Please add BPMN XML content first.');
+                // Check database connection
+                if (!this.state.dbConnected) {
+                    throw new Error('No database connection available. Please refresh the page.');
+                }
+                
+                // Get XML content from database field
+                const xmlContent = this.getDatabaseFieldValue();
+                
+                // Validate database content
+                if (!xmlContent) {
+                    const recordInfo = this.state.recordId ? ` for record ${this.state.recordId}` : '';
+                    throw new Error(`No BPMN XML data found in database${recordInfo}. Please add BPMN XML content first.`);
                 }
 
-                const xmlContent = xmlField.value.trim();
-                console.log('BPMNOwlComponent: XML content length:', xmlContent.length);
+                const recordInfo = this.state.recordId ? ` Record ID: ${this.state.recordId},` : '';
+                console.log(`BPMNOwlComponent: Database XML content loaded, length: ${xmlContent.length},${recordInfo}`);
+
+                // Validate XML format
+                if (!xmlContent.includes('bpmn:definitions') && !xmlContent.includes('<definitions')) {
+                    throw new Error('Invalid BPMN XML format detected in database. Please ensure the content is valid BPMN 2.0 XML.');
+                }
 
                 // Check if BPMN.js is available
                 if (typeof window.BpmnJS === 'undefined') {
@@ -898,8 +1260,8 @@ export class BPMNOwlComponent extends Component {
                     this.setupEventBridge();
                 }, 'event bridge setup');
 
-                // Import the XML with safety check
-                console.log('BPMNOwlComponent: Importing XML...');
+                // Import the XML from database with safety check
+                console.log('BPMNOwlComponent: Importing XML from database...');
                 
                 if (this.isDestroyed) {
                     throw new Error('Component destroyed before import');
@@ -921,18 +1283,20 @@ export class BPMNOwlComponent extends Component {
                 this.state.error = false;
                 this.state.message = "";
                 this.state.lastModified = new Date().toISOString();
+                this.state.lastSyncTime = new Date().toISOString();
                 
                 // Update enhanced state using safe animation frame
                 this.safeRequestAnimationFrame(() => {
                     this.updateDiagramInfo();
                 });
                 
-                console.log('BPMNOwlComponent: Diagram loaded successfully');
+                const finalRecordInfo = this.state.recordId ? `, Record ID: ${this.state.recordId}` : '';
+                console.log(`BPMNOwlComponent: Diagram loaded successfully from database${finalRecordInfo}`);
                 return true;
                 
-            }, 'diagram loading');
-        }, 'loadDiagram').catch(error => {
-            console.error('BPMNOwlComponent: Load failed after all retries:', error);
+            }, 'database diagram loading');
+        }, 'loadDiagramFromDatabase').catch(error => {
+            console.error('BPMNOwlComponent: Database load failed after all retries:', error);
             
             // Only update state if component is not destroyed
             if (!this.isDestroyed) {
@@ -944,10 +1308,14 @@ export class BPMNOwlComponent extends Component {
                     this.state.message = `⚠️ System protection active. Please wait before trying again.`;
                 } else if (error.message.includes('BPMN.js library not loaded')) {
                     this.state.message = `❌ BPMN library not available. Please refresh the page.`;
-                } else if (error.message.includes('No BPMN XML data found')) {
-                    this.state.message = `❌ No BPMN XML content found. Please add valid BPMN XML first.`;
+                } else if (error.message.includes('No database connection')) {
+                    this.state.message = `❌ Database connection lost. Please refresh the page.`;
+                } else if (error.message.includes('No BPMN XML data found in database')) {
+                    this.state.message = `❌ No BPMN XML content found in database for this record. Please add valid BPMN XML first.`;
+                } else if (error.message.includes('Invalid BPMN XML format')) {
+                    this.state.message = `❌ Invalid BPMN XML format in database. Please check the XML content.`;
                 } else {
-                    this.state.message = `❌ Error: ${error.message}`;
+                    this.state.message = `❌ Database Error: ${error.message}`;
                 }
             }
         }).finally(() => {
@@ -956,6 +1324,14 @@ export class BPMNOwlComponent extends Component {
                 this.state.loading = false;
             }
         });
+    }
+
+    /**
+     * Legacy load method that redirects to database-first approach
+     */
+    async loadDiagram() {
+        console.log('BPMNOwlComponent: Redirecting to database-first load...');
+        return this.loadDiagramFromDatabase();
     }
 
     setupEventBridge() {

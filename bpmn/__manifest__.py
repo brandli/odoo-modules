@@ -2,18 +2,22 @@
     'name': 'BPMN Viewer',
     'version': '18.0.1.1.0',
     'category': 'Productivity',
-    'summary': 'BPMN.js integration for Odoo - Basic viewer implementation',
+    'summary': 'BPMN.js integration for Odoo - Database-first viewer implementation',
     'description': """
-BPMN Viewer Module
-==================
+BPMN Viewer Module - Database-First Approach
+============================================
 
-This module provides basic BPMN diagram viewing capabilities within Odoo using BPMN.js.
+This module provides database-first BPMN diagram viewing capabilities within Odoo using BPMN.js.
 Features:
-- View BPMN diagrams in form views
-- Store BPMN XML definitions
-- Basic BPMN.js integration with OWL components
+- Database-first: BPMN diagrams load directly from database fields
+- Automatic synchronization between database and viewer
+- Real-time updates when navigating between records
+- Store BPMN XML definitions in PostgreSQL database
+- Enhanced error handling and connection status monitoring
+- Memory-optimized BPMN.js integration with OWL components
 
-This is a foundational implementation that can be extended with editing capabilities.
+This implementation ensures that the BPMN viewer always reflects the current database state
+and provides a reliable, scalable foundation for BPMN workflow management.
     """,
     'depends': ['base', 'web'],
     'data': [

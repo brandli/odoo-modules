@@ -38,15 +38,21 @@
                         <page string="BPMN Diagram" name="diagram">
                             <div style="margin: 10px 0;">
                                 <div class="alert alert-info">
-                                    <strong>BPMN XML Source:</strong> Edit the BPMN process definition below, then view the diagram.
+                                    <strong>Database-First BPMN Viewer:</strong> The diagram below loads directly from the database field. 
+                                    Edit the BPMN XML content and save to update the diagram automatically.
                                 </div>
-                                <field name="bpmn_xml" widget="text" nolabel="1" style="min-height: 300px; font-family: monospace;"/>
                                 
-                                <!-- OWL Component Integration (Architecture Guide Compliant) -->
+                                <!-- Database-First OWL Component Integration - MOVED TO TOP -->
                                 <div style="margin: 20px 0;">
                                     <div id="bpmn-owl-mount-point">
-                                        <!-- OWL component will be auto-mounted here -->
+                                        <!-- Database-first OWL component will be auto-mounted here -->
                                     </div>
+                                </div>
+                                
+                                <!-- BPMN XML Editor - MOVED BELOW VIEWER -->
+                                <div style="margin-top: 30px;">
+                                    <h5>BPMN XML Source Code</h5>
+                                    <field name="bpmn_xml" widget="text" nolabel="1" style="min-height: 300px; font-family: monospace;"/>
                                 </div>
                             </div>
                         </page>
