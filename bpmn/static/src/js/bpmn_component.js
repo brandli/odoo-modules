@@ -28,6 +28,16 @@ export class BPMNOwlComponent extends Component {
                             <span t-if="state.loading"> Loading from DB...</span>
                             <span t-else=""> Load from Database</span>
                         </button>
+                        <button type="button" 
+                                class="btn btn-success btn-sm" 
+                                t-on-click="saveDiagramToDatabase"
+                                t-att-disabled="state.saving || !state.hasSaveableContent"
+                                title="Update diagram content in the form field">
+                            <i t-if="state.saving" class="fa fa-spinner fa-spin"/>
+                            <i t-else="" class="fa fa-save"/>
+                            <span t-if="state.saving"> Updating...</span>
+                            <span t-else=""> Update Form</span>
+                        </button>
                     </div>
                     <div class="btn-group" role="group" t-if="state.loaded">
                         <button type="button" 
@@ -82,6 +92,14 @@ export class BPMNOwlComponent extends Component {
                                 t-att-disabled="!state.selectedElement"
                                 title="Clear selection">
                             <i class="fa fa-times"/> Clear
+                        </button>
+                    </div>
+                    <div class="btn-group" role="group" t-if="state.dbConnected and state.recordId">
+                        <button type="button" 
+                                class="btn btn-outline-danger btn-sm" 
+                                t-on-click="deleteDiagram"
+                                title="Delete this BPMN process record from database (Ctrl+Delete)">
+                            <i class="fa fa-trash"/> Delete Record
                         </button>
                     </div>
                 </div>
@@ -158,6 +176,17 @@ export class BPMNOwlComponent extends Component {
                 <i t-if="state.error" class="fa fa-exclamation-triangle"/>
                 <i t-else="" class="fa fa-check"/>
                 <span t-esc="state.message"/>
+                <div t-if="state.showReloadButton" class="mt-2">
+                    <button type="button" 
+                            class="btn btn-outline-primary btn-sm" 
+                            t-on-click="reloadPage"
+                            title="Navigate to the saved record with proper navigation">
+                        <i class="fa fa-external-link"/> Go to Saved Record
+                    </button>
+                    <small class="text-muted d-block mt-1">
+                        Click to navigate to the saved record with proper navigation and record count.
+                    </small>
+                </div>
             </div>
             
             <div t-ref="bpmnContainer" 
@@ -172,14 +201,25 @@ export class BPMNOwlComponent extends Component {
                         <i t-else="" class="fa fa-sitemap fa-3x mb-3"/>
                         <div t-if="state.loading">Loading diagram from database...</div>
                         <div t-elif="!state.dbConnected">Database connection required</div>
-                        <div t-elif="state.recordId === null">New BPMN Process</div>
+                        <div t-elif="state.recordId === null">
+                            <strong>New BPMN Process</strong>
+                            <div class="small mt-2">Start by creating a default diagram or add your own BPMN XML</div>
+                        </div>
                         <div t-elif="!state.recordId">No record ID detected</div>
                         <div t-else="">BPMN diagram will auto-load from database or click "Load from Database"</div>
                         <div t-if="state.dbConnected and state.recordId" class="small mt-2">
                             Connected to Record ID: <code t-esc="state.recordId"/>
                         </div>
-                        <div t-if="state.dbConnected and state.recordId === null" class="small mt-2 text-info">
-                            Ready to create new BPMN process
+                        <div t-if="state.dbConnected and state.recordId === null" class="mt-3">
+                            <button type="button" 
+                                    class="btn btn-primary btn-sm" 
+                                    t-on-click="createDefaultDiagram"
+                                    title="Create a default BPMN diagram to get started">
+                                <i class="fa fa-plus-circle"/> Create Default Diagram
+                            </button>
+                            <div class="small mt-2 text-muted">
+                                Or paste BPMN XML in the editor below and click "Load from Database"
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -191,7 +231,10 @@ export class BPMNOwlComponent extends Component {
         this.containerRef = useRef("bpmnContainer");
         this.state = useState({
             loading: false,
+            saving: false,
             loaded: false,
+            hasSaveableContent: false,
+            showReloadButton: false,
             message: "",
             error: false,
             // Enhanced state management with database integration
@@ -242,6 +285,9 @@ export class BPMNOwlComponent extends Component {
             window.bpmnDebug = this;
             console.log('🔧 Debug: Component available as window.bpmnDebug - call window.bpmnDebug.debugConnectionStatus() for diagnostics');
             
+            // Add keyboard shortcuts
+            this.setupKeyboardShortcuts();
+            
             // Initialize database connection and field monitoring
             this.initializeDatabaseConnection();
             
@@ -252,6 +298,40 @@ export class BPMNOwlComponent extends Component {
             
             // Start monitoring for database field changes
             this.startDatabaseFieldMonitoring();
+            
+            // Check for initial saveable content
+            this.safeSetTimeout(() => {
+                this.updateSaveableContentState();
+            }, 1000); // Give time for DOM to be ready
+            
+            // Auto-create default diagram for new records
+            this.safeSetTimeout(() => {
+                const recordId = this.detectRecordId();
+                const fieldValue = this.getDatabaseFieldValue();
+                
+                console.log('BPMNOwlComponent: Auto-creation check - recordId:', recordId, 'fieldValue length:', fieldValue?.length || 0);
+                
+                if ((recordId === null || recordId === 'new') && (!fieldValue || fieldValue.trim().length === 0)) {
+                    console.log('BPMNOwlComponent: New record with no content detected, creating default diagram');
+                    this.createDefaultDiagram();
+                }
+            }, 1500); // Give more time for everything to be ready
+            
+            // Additional check with longer delay in case the first one fails
+            this.safeSetTimeout(() => {
+                // Only create if still no content and no diagram loaded
+                if (!this.state.loaded && !this.state.loading) {
+                    const recordId = this.detectRecordId();
+                    const fieldValue = this.getDatabaseFieldValue();
+                    
+                    console.log('BPMNOwlComponent: Secondary auto-creation check - recordId:', recordId, 'fieldValue length:', fieldValue?.length || 0, 'loaded:', this.state.loaded);
+                    
+                    if ((recordId === null || recordId === 'new') && (!fieldValue || fieldValue.trim().length === 0)) {
+                        console.log('BPMNOwlComponent: Secondary attempt to create default diagram');
+                        this.createDefaultDiagram();
+                    }
+                }
+            }, 3000); // Even longer delay as fallback
         });
         
         onWillDestroy(() => {
@@ -332,8 +412,15 @@ export class BPMNOwlComponent extends Component {
             try {
                 // Remove all tracked event listeners explicitly
                 for (const [eventName, handler] of this.eventListeners) {
-                    this.viewer.off(eventName, handler);
-                    console.log('BPMNOwlComponent: Removed event listener:', eventName);
+                    if (eventName === 'keydown') {
+                        // Remove document-level keyboard listener
+                        document.removeEventListener('keydown', handler);
+                        console.log('BPMNOwlComponent: Removed keyboard event listener');
+                    } else {
+                        // Remove BPMN viewer event listeners
+                        this.viewer.off(eventName, handler);
+                        console.log('BPMNOwlComponent: Removed event listener:', eventName);
+                    }
                 }
                 this.eventListeners.clear();
                 
@@ -419,6 +506,83 @@ export class BPMNOwlComponent extends Component {
         this.domReferences = new WeakMap();
         
         console.log('BPMNOwlComponent: Comprehensive cleanup completed');
+    }
+
+    /**
+     * Setup keyboard shortcuts for BPMN viewer
+     */
+    setupKeyboardShortcuts() {
+        console.log('BPMNOwlComponent: Setting up keyboard shortcuts...');
+        
+        const handleKeyDown = (event) => {
+            if (this.isDestroyed) return;
+            
+            // Only handle shortcuts when the BPMN viewer area is focused or active
+            const target = event.target;
+            const isInBpmnArea = target.closest('.bpmn-owl-component') || 
+                                target.closest('#bpmn-owl-mount-point') ||
+                                target.closest('.bpmn-canvas');
+            
+            if (!isInBpmnArea) return;
+            
+            switch (event.key) {
+                case 'Delete':
+                case 'Backspace':
+                    if (this.state.loaded && event.ctrlKey) {
+                        event.preventDefault();
+                        this.deleteDiagram();
+                    }
+                    break;
+                    
+                case 'Escape':
+                    if (this.state.selectedElement) {
+                        event.preventDefault();
+                        this.clearSelection();
+                    }
+                    break;
+                    
+                case '+':
+                case '=':
+                    if (this.state.loaded) {
+                        event.preventDefault();
+                        this.zoomIn();
+                    }
+                    break;
+                    
+                case '-':
+                    if (this.state.loaded) {
+                        event.preventDefault();
+                        this.zoomOut();
+                    }
+                    break;
+                    
+                case '0':
+                    if (this.state.loaded && event.ctrlKey) {
+                        event.preventDefault();
+                        this.zoomFit();
+                    }
+                    break;
+                    
+                case 's':
+                case 'S':
+                    if (this.state.hasSaveableContent && event.ctrlKey) {
+                        event.preventDefault();
+                        this.saveDiagramToDatabase();
+                    }
+                    break;
+            }
+        };
+        
+        // Add event listener and track it for cleanup
+        document.addEventListener('keydown', handleKeyDown);
+        this.eventListeners.set('keydown', handleKeyDown);
+        
+        console.log('BPMNOwlComponent: Keyboard shortcuts active:');
+        console.log('  - Ctrl+Delete/Backspace: Delete diagram');
+        console.log('  - Escape: Clear selection');
+        console.log('  - +/-: Zoom in/out');
+        console.log('  - Ctrl+0: Fit to screen');
+        console.log('  - Ctrl+S: Save diagram to database');
     }
 
     /**
@@ -869,6 +1033,26 @@ export class BPMNOwlComponent extends Component {
             }
         }
         
+        // Strategy 4.5: Check Odoo's internal record state
+        try {
+            const odooElement = document.querySelector('.o_main_content');
+            if (odooElement && odooElement.__owl__) {
+                const component = odooElement.__owl__.component;
+                if (component && component.env && component.env.services && component.env.services.action) {
+                    const action = component.env.services.action.currentController;
+                    if (action && action.model && action.model.root && action.model.root.resId) {
+                        const resId = action.model.root.resId;
+                        if (resId && resId !== 'virtual_1') {
+                            console.log('BPMNOwlComponent: Found record ID from Odoo internal state:', resId);
+                            return resId.toString();
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            // Ignore errors in internal state detection
+        }
+        
         // Strategy 5: Check for new record indicators in DOM
         const saveButton = document.querySelector('.o_form_button_save');
         const createButton = document.querySelector('.o_form_button_create');
@@ -1053,6 +1237,9 @@ export class BPMNOwlComponent extends Component {
                 else if (currentFieldValue !== this.state.fieldValue) {
                     console.log('BPMNOwlComponent: Database field changed for record', currentRecordId);
                     this.state.fieldValue = currentFieldValue;
+                    
+                    // Check if there's saveable content
+                    this.updateSaveableContentState();
                     this.state.lastSyncTime = new Date().toISOString();
                     
                     if (currentFieldValue) {
@@ -1101,6 +1288,194 @@ export class BPMNOwlComponent extends Component {
     }
 
     /**
+     * Get default BPMN diagram XML for new records
+     */
+    getDefaultBPMNXML() {
+        return `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" 
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" 
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" 
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI" 
+                  id="Definitions_1" 
+                  targetNamespace="http://bpmn.io/schema/bpmn" 
+                  exporter="Camunda Modeler" 
+                  exporterVersion="5.0.0">
+  <bpmn:process id="Process_1" isExecutable="true">
+    <bpmn:startEvent id="StartEvent_1" name="Start">
+      <bpmn:outgoing>Flow_1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:task id="Task_1" name="Sample Task">
+      <bpmn:incoming>Flow_1</bpmn:incoming>
+      <bpmn:outgoing>Flow_2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="EndEvent_1" name="End">
+      <bpmn:incoming>Flow_2</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="StartEvent_1" targetRef="Task_1" />
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_1" targetRef="EndEvent_1" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_1">
+      <bpmndi:BPMNShape id="_BPMNShape_StartEvent_2" bpmnElement="StartEvent_1">
+        <dc:Bounds x="179" y="99" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="185" y="142" width="25" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_1_di" bpmnElement="Task_1">
+        <dc:Bounds x="270" y="77" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_1_di" bpmnElement="EndEvent_1">
+        <dc:Bounds x="432" y="99" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="440" y="142" width="20" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
+        <di:waypoint x="215" y="117" />
+        <di:waypoint x="270" y="117" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2">
+        <di:waypoint x="370" y="117" />
+        <di:waypoint x="432" y="117" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+    }
+
+    /**
+     * Update the hasSaveableContent state based on current diagram and field content
+     */
+    updateSaveableContentState() {
+        try {
+            let hasSaveableContent = false;
+            
+            // Check if there's a loaded diagram with content
+            if (this.viewer && this.state.loaded) {
+                hasSaveableContent = true;
+            }
+            // For new records, always allow saving (we'll provide default content if needed)
+            else if (this.detectRecordId() === null || this.detectRecordId() === 'new') {
+                hasSaveableContent = true;
+                console.log('BPMNOwlComponent: New record detected - enabling save functionality');
+            }
+            // Check if there's XML content in the field
+            else {
+                const fieldValue = this.getDatabaseFieldValue();
+                if (fieldValue && fieldValue.trim().length > 0) {
+                    // Check if it looks like valid XML
+                    if (fieldValue.includes('<bpmn:') || fieldValue.includes('<?xml')) {
+                        hasSaveableContent = true;
+                    }
+                }
+            }
+            
+            // Check if there's a diagram that can be exported
+            if (!hasSaveableContent && this.viewer) {
+                try {
+                    // Try to get XML from viewer (async operation, so we'll handle this separately)
+                    this.viewer.saveXML({ format: true }).then((result) => {
+                        if (result && result.xml && result.xml.trim().length > 0) {
+                            // Only update if it looks like a real diagram (not just empty template)
+                            if (result.xml.includes('bpmn:process') || result.xml.includes('bpmn:definitions')) {
+                                this.state.hasSaveableContent = true;
+                            }
+                        }
+                    }).catch(() => {
+                        // Ignore errors in this check
+                    });
+                } catch (error) {
+                    // Ignore errors in this check
+                }
+            }
+            
+            // Update state
+            this.state.hasSaveableContent = hasSaveableContent;
+            
+            console.log('BPMNOwlComponent: Saveable content state updated:', hasSaveableContent);
+            
+        } catch (error) {
+            console.error('BPMNOwlComponent: Error updating saveable content state:', error);
+            // For new records, default to true to allow saving
+            if (this.detectRecordId() === null || this.detectRecordId() === 'new') {
+                this.state.hasSaveableContent = true;
+            } else {
+                this.state.hasSaveableContent = false;
+            }
+        }
+    }
+
+    /**
+     * Create and load a default BPMN diagram for new records
+     */
+    async createDefaultDiagram() {
+        console.log('BPMNOwlComponent: Creating default diagram for new record');
+        
+        try {
+            const defaultXML = this.getDefaultBPMNXML();
+            
+            // Update the XML field with default content first
+            this.updateXMLField(defaultXML);
+            
+            // Now load the diagram using the same pattern as loadDiagramFromDatabase
+            this.state.loading = true;
+            this.state.error = false;
+            this.state.message = "📝 Creating default BPMN diagram...";
+            
+            // Check if BPMN.js is available
+            if (typeof window.BpmnJS === 'undefined') {
+                throw new Error('BPMN.js library not loaded. Please refresh the page.');
+            }
+            
+            // Clean up existing viewer if any
+            if (this.viewer) {
+                for (const [eventName, handler] of this.eventListeners) {
+                    this.viewer.off(eventName, handler);
+                }
+                this.eventListeners.clear();
+                this.viewer.destroy();
+                this.viewer = null;
+            }
+            
+            // Create new viewer
+            this.viewer = new window.BpmnJS({
+                container: this.containerRef.el
+            });
+            
+            // Setup event bridge
+            this.setupEventBridge();
+            
+            // Import the default XML
+            const result = await this.viewer.importXML(defaultXML);
+            
+            if (result.warnings && result.warnings.length > 0) {
+                console.warn('BPMNOwlComponent: Default diagram import warnings:', result.warnings);
+            }
+            
+            // Success state
+            this.state.loaded = true;
+            this.state.hasSaveableContent = true;
+            this.state.loading = false;
+            this.state.error = false;
+            this.state.message = "✅ Default BPMN diagram created successfully! You can now edit and save it.";
+            this.state.lastModified = new Date().toISOString();
+            
+            // Update enhanced state
+            this.updateDiagramInfo();
+            
+            console.log('BPMNOwlComponent: Default diagram created and loaded successfully');
+            
+        } catch (error) {
+            console.error('BPMNOwlComponent: Failed to create default diagram:', error);
+            this.state.loading = false;
+            this.state.error = true;
+            this.state.message = `❌ Failed to create default diagram: ${error.message}`;
+        }
+    }
+
+    /**
      * Start monitoring XML content changes for record navigation (Legacy method for backward compatibility)
      * This handles cases where user navigates between records using Next/Previous
      */
@@ -1134,6 +1509,7 @@ export class BPMNOwlComponent extends Component {
         // Reset state
         this.state.loaded = false;
         this.state.loading = false;
+        this.state.hasSaveableContent = false;
         this.state.error = false;
         this.state.message = "";
         this.state.selectedElement = null;
@@ -1330,6 +1706,7 @@ export class BPMNOwlComponent extends Component {
                 
                 // Success state
                 this.state.loaded = true;
+                this.state.hasSaveableContent = true;
                 this.state.error = false;
                 this.state.message = "";
                 this.state.lastModified = new Date().toISOString();
@@ -1607,6 +1984,177 @@ export class BPMNOwlComponent extends Component {
             console.log('BPMNOwlComponent: Selection cleared programmatically');
         } catch (error) {
             console.error('BPMNOwlComponent: Clear selection failed:', error);
+        }
+    }
+
+    /**
+     * Simple page reload (only for edge cases)
+     */
+    reloadPage() {
+        console.log('BPMNOwlComponent: Manual page reload requested');
+        window.location.reload();
+    }
+
+    /**
+     * Save the current BPMN diagram to the database
+     */
+    async saveDiagramToDatabase() {
+        if (!this.bpmnViewer) {
+            this.state.error = 'BPMN viewer not initialized';
+            return;
+        }
+
+        try {
+            this.state.saving = true;
+            this.state.error = null;
+
+            // Get the current XML from the modeler
+            const result = await this.bpmnViewer.saveXML({ format: true });
+            const xmlContent = result.xml;
+
+            // Simply update the form field and let Odoo handle everything else
+            this.updateXMLField(xmlContent);
+            
+            // Set a simple message
+            this.state.message = "✅ Form updated! Now use Odoo's standard save (Ctrl+S or toolbar).";
+            this.state.currentXMLContent = xmlContent;
+
+        } catch (error) {
+            console.error('BPMNOwlComponent: Error updating diagram:', error);
+            this.state.error = 'Failed to update diagram: ' + error.message;
+            this.state.message = '';
+        } finally {
+            this.state.saving = false;
+        }
+    }
+    
+    /**
+     * Update the XML field in the form
+     */
+    updateXMLField(xmlContent) {
+        const xmlField = document.querySelector('textarea[name="bpmn_xml"]') ||
+                        document.querySelector('textarea[id*="bpmn_xml"]') ||
+                        document.querySelector('.o_field_text[data-field-name="bpmn_xml"]');
+        
+        if (xmlField) {
+            xmlField.value = xmlContent;
+            xmlField.dispatchEvent(new Event('input', { bubbles: true }));
+            xmlField.dispatchEvent(new Event('change', { bubbles: true }));
+            console.log('BPMNOwlComponent: XML field updated');
+        }
+        
+        // Update saveable content state after field update
+        this.updateSaveableContentState();
+    }
+
+    /**
+     * Delete the current BPMN process record from database
+     */
+    async deleteDiagram() {
+        console.log('BPMNOwlComponent: Delete diagram requested');
+        
+        // Get current record ID
+        const recordId = this.detectRecordId();
+        if (!recordId) {
+            console.warn('BPMNOwlComponent: Cannot delete - no record ID detected');
+            alert('Cannot delete: No record found. You might be creating a new record.');
+            return;
+        }
+        
+        // Show confirmation dialog with record information
+        if (!confirm(`Are you sure you want to permanently delete this BPMN process (ID: ${recordId})?\n\nThis action cannot be undone and will remove the entire record from the database.`)) {
+            console.log('BPMNOwlComponent: Delete cancelled by user');
+            return;
+        }
+        
+        try {
+            console.log(`BPMNOwlComponent: Deleting record ID ${recordId} from database`);
+            
+            // Show deleting status
+            this.state.message = "🗑️ Deleting record from database...";
+            this.state.error = false;
+            
+            // Get CSRF token from meta tag or cookie
+            const getCsrfToken = () => {
+                const meta = document.querySelector('meta[name="csrf-token"]');
+                if (meta) return meta.getAttribute('content');
+                
+                const cookies = document.cookie.split(';');
+                for (let cookie of cookies) {
+                    const [name, value] = cookie.trim().split('=');
+                    if (name === 'csrf_token') return value;
+                }
+                return null;
+            };
+            
+            // Call Odoo RPC to delete the record using fetch API
+            const csrfToken = getCsrfToken();
+            const headers = {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            };
+            
+            if (csrfToken) {
+                headers['X-CSRFToken'] = csrfToken;
+            }
+            
+            const result = await fetch('/web/dataset/call_kw/bpmn.process/unlink', {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    method: 'call',
+                    params: {
+                        model: 'bpmn.process',
+                        method: 'unlink',
+                        args: [[parseInt(recordId)]],
+                        kwargs: {}
+                    },
+                    id: Date.now()
+                })
+            });
+            
+            if (!result.ok) {
+                throw new Error(`HTTP error! status: ${result.status}`);
+            }
+            
+            const jsonResult = await result.json();
+            if (jsonResult.error) {
+                throw new Error(jsonResult.error.data?.message || 'RPC call failed');
+            }
+            
+            console.log('BPMNOwlComponent: Record successfully deleted from database:', jsonResult.result);
+            
+            // Clear the diagram viewer
+            this.clearDiagram();
+            
+            // Update component state
+            this.state.loaded = false;
+            this.state.selectedElement = null;
+            this.state.elementCount = 0;
+            this.state.diagramTitle = '';
+            this.state.currentXMLContent = '';
+            this.state.fieldValue = '';
+            this.state.recordId = null;
+            this.state.dbConnected = false;
+            this.state.message = "✅ Record deleted successfully. Redirecting...";
+            this.state.error = false;
+            
+            // Navigate away from the deleted record
+            setTimeout(() => {
+                // Navigate to the list view
+                window.location.href = '/web#action=bpmn.action_bpmn_process&model=bpmn.process&view_type=list';
+            }, 1500);
+            
+        } catch (error) {
+            console.error('BPMNOwlComponent: Delete record failed:', error);
+            this.state.error = true;
+            this.state.message = `❌ Failed to delete record: ${error.message || 'Unknown error'}`;
+            
+            // Provide helpful error information
+            if (error.message && error.message.includes('Access')) {
+                this.state.message += ' (Check user permissions)';
+            }
         }
     }
 
