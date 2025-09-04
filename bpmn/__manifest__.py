@@ -3,19 +3,16 @@
     'version': '18.0.1.1.0',
     'author': 'Gentian',
     'category': 'Productivity',
-    'summary': 'BPMN diagram viewer and editor for Odoo',
+    'summary': 'BPMN diagram viewer for Odoo',
     'description': """
-BPMN Module
-===========
+BPMN Process Diagrams
+=====================
 
-View and manage BPMN diagrams within Odoo using BPMN.js.
+Interactive BPMN 2.0 diagram viewer integrated with Odoo forms.
 
-Features:
-- Interactive BPMN diagram viewer
-- Real-time diagram updates
-- Integrated with Odoo forms
-- Zoom and navigation controls
-- Element selection and details
+• View and edit BPMN process diagrams
+• Edit BPMN XML with syntax highlighting
+• Powered by BPMN.js library
     """,
     'depends': ['base', 'web'],
     'data': [
