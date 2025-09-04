@@ -1,4 +1,4 @@
-# BPMN Viewer Module
+# BPMN Module
 
 A simple Odoo module for viewing BPMN diagrams using BPMN.js.
 
@@ -13,7 +13,7 @@ A simple Odoo module for viewing BPMN diagrams using BPMN.js.
 
 1. Copy the `bpmn` folder to your Odoo addons directory
 2. Restart Odoo server
-3. Go to Apps and install "BPMN Viewer"
+3. Go to Apps and install "BPMN"
 
 ## Usage
 
