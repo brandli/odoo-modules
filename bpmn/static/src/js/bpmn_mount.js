@@ -27,14 +27,12 @@ class BPMNMountManager {
         // Register cleanup on page unload
         window.addEventListener('beforeunload', this.cleanup);
         
-        console.log('BPMNMountManager: Initialized with memory management');
     }
 
     /**
      * Comprehensive cleanup for memory leak prevention
      */
     cleanup() {
-        console.log('BPMNMountManager: Starting comprehensive cleanup...');
         this.isDestroyed = true;
         
         // Clear all timers
@@ -65,7 +63,6 @@ class BPMNMountManager {
                     mountPoint.innerHTML = '';
                 }
                 
-                console.log('BPMNMountManager: Cleaned up mounted instance');
             } catch (error) {
                 console.warn('BPMNMountManager: Error cleaning mounted instance:', error);
             }
@@ -73,7 +70,6 @@ class BPMNMountManager {
         this.mountedInstances.clear();
         this.mountAttempts.clear();
         
-        console.log('BPMNMountManager: Cleanup completed');
     }
 
     /**
@@ -105,11 +101,9 @@ class BPMNMountManager {
                            window.location.href.includes('bpmn.process');
         
         if (!isBPMNPage) {
-            console.log('BPMNMountManager: Not a BPMN page, skipping auto-mount');
             return;
         }
         
-        console.log('BPMNMountManager: Starting auto-mount process...');
         
         // Wait for the mount point to be available
         const checkForMountPoint = (attempts = 0) => {
@@ -122,7 +116,6 @@ class BPMNMountManager {
                 !this.mountAttempts.has(mountKey)) {
                 
                 this.mountAttempts.add(mountKey);
-                console.log('BPMNMountManager: Mount point found, mounting component...');
                 
                 try {
                     // Get the registered component
@@ -141,7 +134,6 @@ class BPMNMountManager {
                     this.mountedInstances.set(mountPoint, instance);
                     mountPoint.setAttribute('data-bpmn-mounted', 'true');
                     
-                    console.log('BPMNMountManager: ✅ Component mounted successfully!');
                     
                 } catch (error) {
                     console.error('BPMNMountManager: Mount failed:', error);
@@ -160,12 +152,9 @@ class BPMNMountManager {
                 }
                 
             } else if (mountPoint && mountPoint.hasAttribute('data-bpmn-mounted')) {
-                console.log('BPMNMountManager: Component already mounted, skipping...');
             } else if (attempts < 10 && !this.isDestroyed) {
-                console.log(`BPMNMountManager: Mount point not ready, attempt ${attempts + 1}/10`);
                 this.safeSetTimeout(() => checkForMountPoint(attempts + 1), 500);
             } else if (!this.isDestroyed) {
-                console.log('BPMNMountManager: Mount point not found after 10 attempts');
             }
         };
         
@@ -181,7 +170,6 @@ class BPMNMountManager {
         
         // Ensure document.body exists before starting observer
         if (!document.body) {
-            console.log('BPMNMountManager: Document body not ready, waiting...');
             this.safeSetTimeout(() => this.observePageChanges(), 100);
             return;
         }
@@ -205,7 +193,6 @@ class BPMNMountManager {
                                  node.querySelector('#bpmn-owl-mount-point') ||
                                  node.id === 'bpmn-owl-mount-point')) {
                                 shouldCheckMount = true;
-                                console.log('BPMNMountManager: Detected BPMN form content, checking for mount...');
                                 break;
                             }
                         }
@@ -228,7 +215,6 @@ class BPMNMountManager {
             subtree: true
         });
         
-        console.log('BPMNMountManager: Started observing page changes for SPA navigation');
     }
 
     /**
@@ -237,7 +223,6 @@ class BPMNMountManager {
     initialize() {
         if (this.isDestroyed) return;
         
-        console.log('BPMNMountManager: Initializing...');
         
         // Initial mount attempt
         this.safeSetTimeout(this.mountBPMNComponent, 1000);
@@ -245,7 +230,6 @@ class BPMNMountManager {
         // Start observing for SPA navigation
         this.observePageChanges();
         
-        console.log('BPMNMountManager: Auto-mount script loaded with SPA support and memory management');
     }
 }
 

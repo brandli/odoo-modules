@@ -278,12 +278,7 @@ export class BPMNOwlComponent extends Component {
         this.baseRetryDelay = 1000; // Base delay for exponential backoff (1 second)
         
         onMounted(() => {
-            console.log('BPMNOwlComponent: Mounted successfully with database-first approach');
             this.isDestroyed = false;
-            
-            // Make component accessible for debugging
-            window.bpmnDebug = this;
-            console.log('🔧 Debug: Component available as window.bpmnDebug - call window.bpmnDebug.debugConnectionStatus() for diagnostics');
             
             // Add keyboard shortcuts
             this.setupKeyboardShortcuts();
@@ -309,10 +304,7 @@ export class BPMNOwlComponent extends Component {
                 const recordId = this.detectRecordId();
                 const fieldValue = this.getDatabaseFieldValue();
                 
-                console.log('BPMNOwlComponent: Auto-creation check - recordId:', recordId, 'fieldValue length:', fieldValue?.length || 0);
-                
                 if ((recordId === null || recordId === 'new') && (!fieldValue || fieldValue.trim().length === 0)) {
-                    console.log('BPMNOwlComponent: New record with no content detected, creating default diagram');
                     this.createDefaultDiagram();
                 }
             }, 1500); // Give more time for everything to be ready
@@ -324,10 +316,7 @@ export class BPMNOwlComponent extends Component {
                     const recordId = this.detectRecordId();
                     const fieldValue = this.getDatabaseFieldValue();
                     
-                    console.log('BPMNOwlComponent: Secondary auto-creation check - recordId:', recordId, 'fieldValue length:', fieldValue?.length || 0, 'loaded:', this.state.loaded);
-                    
                     if ((recordId === null || recordId === 'new') && (!fieldValue || fieldValue.trim().length === 0)) {
-                        console.log('BPMNOwlComponent: Secondary attempt to create default diagram');
                         this.createDefaultDiagram();
                     }
                 }
@@ -335,13 +324,7 @@ export class BPMNOwlComponent extends Component {
         });
         
         onWillDestroy(() => {
-            console.log('BPMNOwlComponent: Starting comprehensive cleanup...');
             this.isDestroyed = true;
-            
-            // Clean up debug reference
-            if (window.bpmnDebug === this) {
-                delete window.bpmnDebug;
-            }
             
             this.performComprehensiveCleanup();
         });
@@ -352,12 +335,9 @@ export class BPMNOwlComponent extends Component {
      * Prevents memory leaks from event listeners, timers, canvas contexts, and DOM references
      */
     performComprehensiveCleanup() {
-        console.log('BPMNOwlComponent: Performing comprehensive cleanup...');
-        
         // 1. Cancel all pending animation frames
         for (const frameId of this.animationFrames) {
             cancelAnimationFrame(frameId);
-            console.log('BPMNOwlComponent: Cancelled animation frame:', frameId);
         }
         this.animationFrames.clear();
         
@@ -365,7 +345,6 @@ export class BPMNOwlComponent extends Component {
         for (const timerId of this.timers) {
             clearTimeout(timerId);
             clearInterval(timerId);
-            console.log('BPMNOwlComponent: Cleared timer:', timerId);
         }
         this.timers.clear();
         
@@ -373,7 +352,6 @@ export class BPMNOwlComponent extends Component {
         for (const observable of this.observables) {
             if (observable && typeof observable.unsubscribe === 'function') {
                 observable.unsubscribe();
-                console.log('BPMNOwlComponent: Unsubscribed from observable');
             }
         }
         this.observables.clear();
@@ -387,18 +365,13 @@ export class BPMNOwlComponent extends Component {
                     const canvas = context.canvas;
                     if (canvas) {
                         context.clearRect(0, 0, canvas.width, canvas.height);
-                        console.log('BPMNOwlComponent: Cleared HTML5 canvas context');
                     }
                 } else if (context && context.remove && typeof context.remove === 'function') {
                     // DOM element that can be removed
                     context.remove();
-                    console.log('BPMNOwlComponent: Removed DOM canvas element');
                 } else if (context && context.innerHTML !== undefined) {
                     // DOM element that can be cleared
                     context.innerHTML = '';
-                    console.log('BPMNOwlComponent: Cleared DOM element content');
-                } else {
-                    console.log('BPMNOwlComponent: Canvas context type not recognized, skipping cleanup');
                 }
             } catch (error) {
                 console.warn('BPMNOwlComponent: Error cleaning canvas context:', error);
@@ -415,11 +388,9 @@ export class BPMNOwlComponent extends Component {
                     if (eventName === 'keydown') {
                         // Remove document-level keyboard listener
                         document.removeEventListener('keydown', handler);
-                        console.log('BPMNOwlComponent: Removed keyboard event listener');
                     } else {
                         // Remove BPMN viewer event listeners
                         this.viewer.off(eventName, handler);
-                        console.log('BPMNOwlComponent: Removed event listener:', eventName);
                     }
                 }
                 this.eventListeners.clear();
@@ -430,7 +401,6 @@ export class BPMNOwlComponent extends Component {
                     if (eventBus && typeof eventBus.off === 'function') {
                         // Remove any remaining listeners from event bus
                         eventBus.off();
-                        console.log('BPMNOwlComponent: Cleared BPMN.js event bus');
                     }
                 } catch (error) {
                     console.warn('BPMNOwlComponent: Could not access BPMN.js event bus:', error);
@@ -453,7 +423,6 @@ export class BPMNOwlComponent extends Component {
                         
                         if (canvasElement) {
                             this.canvasContexts.add(canvasElement);
-                            console.log('BPMNOwlComponent: Added canvas element to cleanup queue');
                         }
                     }
                 } catch (error) {
@@ -462,7 +431,6 @@ export class BPMNOwlComponent extends Component {
                 
                 // Destroy BPMN.js viewer instance
                 this.viewer.destroy();
-                console.log('BPMNOwlComponent: BPMN viewer destroyed');
                 
             } catch (error) {
                 console.error('BPMNOwlComponent: Error during viewer cleanup:', error);
@@ -504,16 +472,12 @@ export class BPMNOwlComponent extends Component {
         
         // 8. Clear WeakMap references
         this.domReferences = new WeakMap();
-        
-        console.log('BPMNOwlComponent: Comprehensive cleanup completed');
     }
 
     /**
      * Setup keyboard shortcuts for BPMN viewer
      */
     setupKeyboardShortcuts() {
-        console.log('BPMNOwlComponent: Setting up keyboard shortcuts...');
-        
         const handleKeyDown = (event) => {
             if (this.isDestroyed) return;
             
@@ -576,13 +540,6 @@ export class BPMNOwlComponent extends Component {
         // Add event listener and track it for cleanup
         document.addEventListener('keydown', handleKeyDown);
         this.eventListeners.set('keydown', handleKeyDown);
-        
-        console.log('BPMNOwlComponent: Keyboard shortcuts active:');
-        console.log('  - Ctrl+Delete/Backspace: Delete diagram');
-        console.log('  - Escape: Clear selection');
-        console.log('  - +/-: Zoom in/out');
-        console.log('  - Ctrl+0: Fit to screen');
-        console.log('  - Ctrl+S: Save diagram to database');
     }
 
     /**
@@ -649,7 +606,6 @@ export class BPMNOwlComponent extends Component {
             
             if (isValidContext) {
                 this.canvasContexts.add(context);
-                console.log('BPMNOwlComponent: Canvas context tracked for cleanup');
             } else {
                 console.warn('BPMNOwlComponent: Context not trackable:', typeof context);
             }
