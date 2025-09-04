@@ -1,13 +1,15 @@
 # BPMN Module
 
-A simple Odoo module for viewing BPMN diagrams using BPMN.js.
+Interactive BPMN diagram viewer and editor for Odoo using BPMN.js.
 
 ## Features
 
-- **View BPMN Diagrams**: Render BPMN 2.0 XML as interactive diagrams
-- **Simple Interface**: Edit XML and load diagrams with one click
-- **Demo Data**: Includes sample BPMN processes for testing
-- **Clean Integration**: Uses BPMN.js library for professional diagram rendering
+- **Interactive BPMN Viewer**: Render BPMN 2.0 XML as interactive diagrams
+- **Zoom & Navigation**: Full zoom and pan controls for large diagrams  
+- **Element Selection**: Click elements to view details and properties
+- **Real-time Updates**: Edit XML and reload to see changes instantly
+- **Modern UI**: Clean, card-based interface with Bootstrap styling
+- **Professional Integration**: Uses BPMN.js library for standards-compliant rendering
 
 ## Installation
 
@@ -20,14 +22,16 @@ A simple Odoo module for viewing BPMN diagrams using BPMN.js.
 1. Navigate to **BPMN > Processes**
 2. Create a new process or edit an existing one
 3. Go to the **BPMN Diagram** tab
-4. Edit the XML source or use the provided sample
-5. Click **Load Diagram** to render the visualization
+4. Edit the XML source or create a default diagram
+5. Use the **Reload** button to update the visualization
+6. Use zoom, pan, and selection controls to navigate the diagram
 
 ## Technical Details
 
 - **BPMN.js Version**: 17.7.1
 - **Odoo Version**: 18.0+
 - **Dependencies**: base, web
+- **Architecture**: OWL Components with modern ES6+ JavaScript
 - **License**: LGPL-3
 
 ## Files Structure

@@ -34,30 +34,27 @@
                         </group>
                     </group>
                     
-                    <notebook>
-                        <page string="BPMN Diagram" name="diagram">
-                            <div style="margin: 10px 0;">
-                                <div class="alert alert-info">
-                                    <strong>Database-First BPMN Viewer:</strong> The diagram below loads directly from the database field. 
-                                    Edit the BPMN XML content and save to update the diagram automatically.
-                                </div>
-                                
-                                <!-- Database-First OWL Component Integration - MOVED TO TOP -->
-                                <div style="margin: 20px 0;">
-                                    <div id="bpmn-owl-mount-point" data-unique-viewer="true">
-                                        <!-- Database-first OWL component will be auto-mounted here -->
-                                    </div>
-                                </div>
-                                
-                                <!-- BPMN XML Editor - MOVED BELOW VIEWER -->
-                                <div style="margin-top: 30px;">
-                                    <h5>BPMN XML Source Code</h5>
-                                    <field name="bpmn_xml" widget="text" nolabel="1" 
-                                           style="min-height: 300px; font-family: monospace;"/>
-                                </div>
+                    <!-- BPMN Component Integration -->
+                    <div style="margin: 20px 0;">
+                        <div id="bpmn-owl-mount-point" data-unique-viewer="true">
+                            <!-- BPMN component will be auto-mounted here -->
+                        </div>
+                    </div>
+                    
+                    <!-- BPMN XML Editor -->
+                    <div style="margin-top: 30px;">
+                        <div class="o_horizontal_separator">BPMN XML Source Code</div>
+                        <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 10px; margin-top: 10px;">
+                            <div style="background: #e9ecef; padding: 5px 10px; margin: -10px -10px 10px -10px; border-radius: 3px 3px 0 0; font-size: 12px; color: #6c757d;">
+                                <i class="fa fa-code"/> XML Editor - Edit your BPMN 2.0 definition below
                             </div>
-                        </page>
-                    </notebook>
+                            <field name="bpmn_xml" widget="text" nolabel="1" 
+                                   style="min-height: 300px; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; 
+                                          background: #ffffff; border: 1px solid #ced4da; border-radius: 3px; 
+                                          padding: 10px; font-size: 13px; line-height: 1.4;" 
+                                   placeholder="Enter your BPMN 2.0 XML definition here..."/>
+                        </div>
+                    </div>
                 </sheet>
             </form>
         </field>

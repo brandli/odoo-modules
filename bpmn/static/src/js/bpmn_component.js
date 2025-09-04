@@ -15,210 +15,147 @@ import { registry as webRegistry } from "@web/core/registry";
 export class BPMNOwlComponent extends Component {
     static template = xml`
         <div class="bpmn-owl-component">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5 class="mb-0">BPMN Diagram Viewer (Database-First)</h5>
-                <div class="btn-toolbar" role="toolbar">
-                    <div class="btn-group me-2" role="group">
-                        <button type="button" 
-                                class="btn btn-primary btn-sm" 
-                                t-on-click="loadDiagramFromDatabase"
-                                t-att-disabled="state.loading">
-                            <i t-if="state.loading" class="fa fa-spinner fa-spin"/>
-                            <i t-else="" class="fa fa-database"/>
-                            <span t-if="state.loading"> Loading from DB...</span>
-                            <span t-else=""> Load from Database</span>
-                        </button>
-                        <button type="button" 
-                                class="btn btn-success btn-sm" 
-                                t-on-click="saveDiagramToDatabase"
-                                t-att-disabled="state.saving || !state.hasSaveableContent"
-                                title="Update diagram content in the form field">
-                            <i t-if="state.saving" class="fa fa-spinner fa-spin"/>
-                            <i t-else="" class="fa fa-save"/>
-                            <span t-if="state.saving"> Updating...</span>
-                            <span t-else=""> Update Form</span>
-                        </button>
-                    </div>
-                    <div class="btn-group" role="group" t-if="state.loaded">
-                        <button type="button" 
-                                class="btn btn-outline-secondary btn-sm" 
-                                t-on-click="zoomFit"
-                                title="Fit diagram to viewport">
-                            <i class="fa fa-expand"/> Fit
-                        </button>
-                        <button type="button" 
-                                class="btn btn-outline-secondary btn-sm" 
-                                t-on-click="zoomIn"
-                                title="Zoom in">
-                            <i class="fa fa-plus"/>
-                        </button>
-                        <button type="button" 
-                                class="btn btn-outline-secondary btn-sm" 
-                                t-on-click="zoomOut"
-                                title="Zoom out">
-                            <i class="fa fa-minus"/>
-                        </button>
-                    </div>
-                    <div class="btn-group me-2" role="group" t-if="state.loaded">
-                        <button type="button" 
-                                class="btn btn-outline-info btn-sm" 
-                                t-on-click="panLeft"
-                                title="Pan left">
-                            <i class="fa fa-arrow-left"/>
-                        </button>
-                        <button type="button" 
-                                class="btn btn-outline-info btn-sm" 
-                                t-on-click="panUp"
-                                title="Pan up">
-                            <i class="fa fa-arrow-up"/>
-                        </button>
-                        <button type="button" 
-                                class="btn btn-outline-info btn-sm" 
-                                t-on-click="panDown"
-                                title="Pan down">
-                            <i class="fa fa-arrow-down"/>
-                        </button>
-                        <button type="button" 
-                                class="btn btn-outline-info btn-sm" 
-                                t-on-click="panRight"
-                                title="Pan right">
-                            <i class="fa fa-arrow-right"/>
-                        </button>
-                    </div>
-                    <div class="btn-group" role="group" t-if="state.loaded">
-                        <button type="button" 
-                                class="btn btn-outline-secondary btn-sm" 
-                                t-on-click="clearSelection"
-                                t-att-disabled="!state.selectedElement"
-                                title="Clear selection">
-                            <i class="fa fa-times"/> Clear
-                        </button>
-                    </div>
-                    <div class="btn-group" role="group" t-if="state.dbConnected and state.recordId">
-                        <button type="button" 
-                                class="btn btn-outline-danger btn-sm" 
-                                t-on-click="deleteDiagram"
-                                title="Delete this BPMN process record from database (Ctrl+Delete)">
-                            <i class="fa fa-trash"/> Delete Record
-                        </button>
+            <!-- Header with controls -->
+            <div class="card mb-3">
+                <div class="card-header py-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0 text-primary">
+                            <i class="fa fa-sitemap me-2"/>BPMN Diagram
+                        </h6>
+                        <div class="btn-toolbar" role="toolbar">
+                            <div class="btn-group me-2" role="group">
+                                <button type="button" 
+                                        class="btn btn-outline-primary btn-sm" 
+                                        t-on-click="loadDiagramFromDatabase"
+                                        t-att-disabled="state.loading">
+                                    <i t-if="state.loading" class="fa fa-spinner fa-spin"/>
+                                    <i t-else="" class="fa fa-refresh"/>
+                                    <span t-if="state.loading"> Loading...</span>
+                                    <span t-else=""> Reload</span>
+                                </button>
+                                <button type="button" 
+                                        class="btn btn-outline-success btn-sm" 
+                                        t-on-click="saveDiagramToDatabase"
+                                        t-att-disabled="state.saving || !state.hasSaveableContent">
+                                    <i t-if="state.saving" class="fa fa-spinner fa-spin"/>
+                                    <i t-else="" class="fa fa-save"/>
+                                    <span t-if="state.saving"> Saving...</span>
+                                    <span t-else=""> Save</span>
+                                </button>
+                            </div>
+                            
+                            <!-- Zoom controls -->
+                            <div class="btn-group me-2" role="group" t-if="state.loaded">
+                                <button type="button" 
+                                        class="btn btn-outline-secondary btn-sm" 
+                                        t-on-click="zoomFit"
+                                        title="Fit to view">
+                                    <i class="fa fa-expand"/>
+                                </button>
+                                <button type="button" 
+                                        class="btn btn-outline-secondary btn-sm" 
+                                        t-on-click="zoomIn"
+                                        title="Zoom in">
+                                    <i class="fa fa-plus"/>
+                                </button>
+                                <button type="button" 
+                                        class="btn btn-outline-secondary btn-sm" 
+                                        t-on-click="zoomOut"
+                                        title="Zoom out">
+                                    <i class="fa fa-minus"/>
+                                </button>
+                            </div>
+                            
+                            <!-- Additional controls -->
+                            <div class="btn-group" role="group" t-if="state.loaded">
+                                <button type="button" 
+                                        class="btn btn-outline-secondary btn-sm" 
+                                        t-on-click="clearSelection"
+                                        t-att-disabled="!state.selectedElement"
+                                        title="Clear selection">
+                                    <i class="fa fa-times"/>
+                                </button>
+                                <button type="button" 
+                                        class="btn btn-outline-danger btn-sm" 
+                                        t-on-click="deleteDiagram"
+                                        t-att-disabled="!state.recordId"
+                                        title="Delete diagram">
+                                    <i class="fa fa-trash"/>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
-            
-            <!-- Database Connection Status -->
-            <div class="small text-muted mb-2 d-flex justify-content-between align-items-center">
-                <div>
-                    <span t-if="state.dbConnected">
-                        <i class="fa fa-database text-success"/> Database Connected
-                        <span t-if="state.recordId" class="ms-2">
-                            (Record ID: <code t-esc="state.recordId"/>)
-                        </span>
-                    </span>
-                    <span t-else="">
-                        <i class="fa fa-database text-warning"/> Database Not Connected
-                    </span>
-                    <span t-if="state.lastSyncTime" class="ms-3">
-                        Last Sync: <span t-esc="new Date(state.lastSyncTime).toLocaleTimeString()"/>
-                    </span>
-                </div>
-                <div>
-                    <span t-if="state.fieldValue">
-                        Content: <span t-esc="Math.round(state.fieldValue.length / 1024)"/>KB
-                    </span>
-                </div>
-            </div>
-            
-            <!-- Status bar -->
-            <div t-if="state.loaded" class="small text-muted mb-2 d-flex justify-content-between">
-                <div>
-                    <span t-if="state.diagramTitle">
-                        <i class="fa fa-sitemap"/> <strong t-esc="state.diagramTitle"/>
-                    </span>
-                    <span class="ms-3" t-if="state.elementCount > 0">
-                        Elements: <span t-esc="state.elementCount"/>
-                    </span>
-                </div>
-                <div>
-                    <span t-if="state.selectedElement">
-                        Selected: <code t-esc="state.selectedElement"/>
-                    </span>
-                    <span class="ms-3">
-                        Zoom: <span t-esc="Math.round(state.zoomLevel * 100)"/>%
-                    </span>
+                
+                <!-- Status info -->
+                <div class="card-body py-2" t-if="state.loaded">
+                    <div class="row small text-muted">
+                        <div class="col-md-6">
+                            <span t-if="state.diagramTitle" class="me-3">
+                                <i class="fa fa-tag me-1"/><span t-esc="state.diagramTitle"/>
+                            </span>
+                            <span t-if="state.elementCount > 0" class="me-3">
+                                <i class="fa fa-cubes me-1"/><span t-esc="state.elementCount"/> elements
+                            </span>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <span t-if="state.selectedElement" class="me-3">
+                                <i class="fa fa-mouse-pointer me-1"/>Selected: <code t-esc="state.selectedElement"/>
+                            </span>
+                            <span>
+                                <i class="fa fa-search me-1"/>Zoom: <span t-esc="Math.round(state.zoomLevel * 100)"/>%
+                            </span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Circuit Breaker Status Indicator -->
+            
+            <!-- Messages -->
+            <div t-if="state.message" 
+                 class="alert"
+                 t-att-class="state.error ? 'alert-danger' : 'alert-success'">
+                <i t-if="state.error" class="fa fa-exclamation-triangle me-2"/>
+                <i t-else="" class="fa fa-check me-2"/>
+                <span t-esc="state.message"/>
+            </div>
+            
+            <!-- Error state indicator -->
             <div t-if="state.isCircuitOpen" 
-                 class="alert alert-warning mb-2 small d-flex justify-content-between align-items-center">
+                 class="alert alert-warning d-flex justify-content-between align-items-center">
                 <div>
-                    <i class="fa fa-shield-alt"/> 
-                    <strong>System Protection Active</strong> - 
-                    Error threshold reached. 
-                    <span t-if="state.recoveryInProgress">
-                        <i class="fa fa-spinner fa-spin"/> Automatic recovery in progress.
-                    </span>
-                    <span t-else="">
-                        Waiting for cooldown period.
-                    </span>
+                    <i class="fa fa-exclamation-triangle me-2"/>
+                    <strong>System Protection Active</strong> - Please wait or try again later
                 </div>
                 <button type="button" 
                         class="btn btn-outline-warning btn-sm" 
-                        t-on-click="manualResetCircuitBreaker"
-                        title="Manually reset error protection">
-                    <i class="fa fa-refresh"/> Reset
+                        t-on-click="manualResetCircuitBreaker">
+                    <i class="fa fa-refresh me-1"/>Reset
                 </button>
             </div>
             
-            <div t-if="state.message" 
-                 class="alert mb-3"
-                 t-att-class="state.error ? 'alert-danger' : 'alert-success'">
-                <i t-if="state.error" class="fa fa-exclamation-triangle"/>
-                <i t-else="" class="fa fa-check"/>
-                <span t-esc="state.message"/>
-                <div t-if="state.showReloadButton" class="mt-2">
-                    <button type="button" 
-                            class="btn btn-outline-primary btn-sm" 
-                            t-on-click="reloadPage"
-                            title="Navigate to the saved record with proper navigation">
-                        <i class="fa fa-external-link"/> Go to Saved Record
-                    </button>
-                    <small class="text-muted d-block mt-1">
-                        Click to navigate to the saved record with proper navigation and record count.
-                    </small>
-                </div>
-            </div>
-            
-            <div t-ref="bpmnContainer" 
-                 class="bpmn-canvas" 
-                 style="height: 400px; border: 1px solid #dee2e6; background: #fafafa;">
-                <div t-if="!state.loaded" 
-                     class="d-flex align-items-center justify-content-center h-100 text-muted">
-                    <div class="text-center">
-                        <i t-if="state.loading" class="fa fa-spinner fa-spin fa-3x mb-3"/>
-                        <i t-elif="!state.dbConnected" class="fa fa-database fa-3x mb-3 text-warning"/>
-                        <i t-elif="state.recordId === null" class="fa fa-plus-circle fa-3x mb-3 text-info"/>
-                        <i t-else="" class="fa fa-sitemap fa-3x mb-3"/>
-                        <div t-if="state.loading">Loading diagram from database...</div>
-                        <div t-elif="!state.dbConnected">Database connection required</div>
-                        <div t-elif="state.recordId === null">
-                            <strong>New BPMN Process</strong>
-                            <div class="small mt-2">Start by creating a default diagram or add your own BPMN XML</div>
-                        </div>
-                        <div t-elif="!state.recordId">No record ID detected</div>
-                        <div t-else="">BPMN diagram will auto-load from database or click "Load from Database"</div>
-                        <div t-if="state.dbConnected and state.recordId" class="small mt-2">
-                            Connected to Record ID: <code t-esc="state.recordId"/>
-                        </div>
-                        <div t-if="state.dbConnected and state.recordId === null" class="mt-3">
-                            <button type="button" 
-                                    class="btn btn-primary btn-sm" 
-                                    t-on-click="createDefaultDiagram"
-                                    title="Create a default BPMN diagram to get started">
-                                <i class="fa fa-plus-circle"/> Create Default Diagram
-                            </button>
-                            <div class="small mt-2 text-muted">
-                                Or paste BPMN XML in the editor below and click "Load from Database"
+            <!-- BPMN Canvas -->
+            <div class="card">
+                <div t-ref="bpmnContainer" 
+                     class="bpmn-canvas card-body p-0" 
+                     style="height: 500px; background: #fff;">
+                    <div t-if="!state.loaded" 
+                         class="d-flex align-items-center justify-content-center h-100">
+                        <div class="text-center text-muted">
+                            <div t-if="state.loading">
+                                <i class="fa fa-spinner fa-spin fa-2x mb-3"/>
+                                <div>Loading diagram...</div>
+                            </div>
+                            <div t-else="">
+                                <i class="fa fa-sitemap fa-2x mb-3"/>
+                                <div>No diagram loaded</div>
+                                <div class="small mt-2">
+                                    <button type="button" 
+                                            class="btn btn-outline-primary btn-sm mt-2" 
+                                            t-on-click="createDefaultDiagram">
+                                        <i class="fa fa-plus me-1"/>Create Default Diagram
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1436,8 +1373,8 @@ export class BPMNOwlComponent extends Component {
      * This handles cases where user navigates between records using Next/Previous
      */
     startXMLContentMonitoring() {
-        // Redirect to new database-first monitoring
-        console.log('BPMNOwlComponent: Redirecting to database-first monitoring...');
+        // Redirect to new integrated monitoring
+        console.log('BPMNOwlComponent: Redirecting to integrated monitoring...');
         this.startDatabaseFieldMonitoring();
     }
 
@@ -1522,8 +1459,8 @@ export class BPMNOwlComponent extends Component {
      * Legacy auto-load method for backward compatibility
      */
     async autoLoadDiagram() {
-        // Redirect to database-first approach
-        console.log('BPMNOwlComponent: Redirecting to database-first auto-load...');
+        // Redirect to integrated approach
+        console.log('BPMNOwlComponent: Redirecting to integrated auto-load...');
         await this.autoLoadDiagramFromDatabase();
     }
 
@@ -1710,10 +1647,10 @@ export class BPMNOwlComponent extends Component {
     }
 
     /**
-     * Legacy load method that redirects to database-first approach
+     * Legacy load method that redirects to integrated approach
      */
     async loadDiagram() {
-        console.log('BPMNOwlComponent: Redirecting to database-first load...');
+        console.log('BPMNOwlComponent: Redirecting to integrated load...');
         return this.loadDiagramFromDatabase();
     }
 
