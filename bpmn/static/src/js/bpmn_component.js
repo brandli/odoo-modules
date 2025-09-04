@@ -168,13 +168,18 @@ export class BPMNOwlComponent extends Component {
                     <div class="text-center">
                         <i t-if="state.loading" class="fa fa-spinner fa-spin fa-3x mb-3"/>
                         <i t-elif="!state.dbConnected" class="fa fa-database fa-3x mb-3 text-warning"/>
+                        <i t-elif="state.recordId === null" class="fa fa-plus-circle fa-3x mb-3 text-info"/>
                         <i t-else="" class="fa fa-sitemap fa-3x mb-3"/>
                         <div t-if="state.loading">Loading diagram from database...</div>
                         <div t-elif="!state.dbConnected">Database connection required</div>
+                        <div t-elif="state.recordId === null">New BPMN Process</div>
                         <div t-elif="!state.recordId">No record ID detected</div>
                         <div t-else="">BPMN diagram will auto-load from database or click "Load from Database"</div>
                         <div t-if="state.dbConnected and state.recordId" class="small mt-2">
                             Connected to Record ID: <code t-esc="state.recordId"/>
+                        </div>
+                        <div t-if="state.dbConnected and state.recordId === null" class="small mt-2 text-info">
+                            Ready to create new BPMN process
                         </div>
                     </div>
                 </div>
@@ -750,20 +755,33 @@ export class BPMNOwlComponent extends Component {
             // Extract record ID from multiple sources
             const recordId = this.detectRecordId();
             
-            if (recordId) {
+            if (recordId && recordId !== 'new') {
                 this.state.recordId = parseInt(recordId);
                 this.state.dbConnected = true;
                 console.log('BPMNOwlComponent: Database connection established, record ID:', recordId);
+            } else if (recordId === 'new') {
+                this.state.recordId = null;
+                this.state.dbConnected = true; // Still connected, just no record yet
+                console.log('BPMNOwlComponent: New record mode detected');
+                
+                // For new records, show a helpful message
+                this.state.message = "📝 Create a new BPMN process by adding XML content below and saving.";
             } else {
                 console.warn('BPMNOwlComponent: Could not determine record ID - checking alternatives...');
                 
                 // Fallback: Wait a moment and try again (for dynamic loading)
                 this.safeSetTimeout(() => {
                     const fallbackRecordId = this.detectRecordId();
-                    if (fallbackRecordId) {
+                    if (fallbackRecordId && fallbackRecordId !== 'new') {
                         this.state.recordId = parseInt(fallbackRecordId);
                         this.state.dbConnected = true;
                         console.log('BPMNOwlComponent: Database connection established via fallback, record ID:', fallbackRecordId);
+                        this.state.message = ""; // Clear any previous message
+                    } else if (fallbackRecordId === 'new') {
+                        this.state.recordId = null;
+                        this.state.dbConnected = true;
+                        console.log('BPMNOwlComponent: New record mode confirmed via fallback');
+                        this.state.message = "📝 Create a new BPMN process by adding XML content below and saving.";
                     } else {
                         this.state.dbConnected = false;
                         console.warn('BPMNOwlComponent: Still could not determine record ID after fallback');
@@ -796,6 +814,13 @@ export class BPMNOwlComponent extends Component {
         // Strategy 1: Extract from URL path (most common in Odoo)
         // Handles URLs like: /odoo/action-171/2 or /web#id=2&action=171
         const urlPath = window.location.pathname;
+        
+        // Check for "new" record creation mode
+        if (urlPath.includes('/new') || window.location.href.includes('/new')) {
+            console.log('BPMNOwlComponent: Detected new record creation mode');
+            return 'new';
+        }
+        
         const urlPathMatch = urlPath.match(/\/(\d+)$/); // Match number at end of path
         if (urlPathMatch) {
             const recordId = urlPathMatch[1];
@@ -814,6 +839,12 @@ export class BPMNOwlComponent extends Component {
         // Strategy 3: Hash-based URLs (Odoo web client) - #id=123
         const hash = window.location.hash;
         if (hash) {
+            // Check for new record in hash
+            if (hash.includes('id=false') || hash.includes('id=null') || hash.includes('view_type=form') && !hash.includes('id=')) {
+                console.log('BPMNOwlComponent: Detected new record in hash');
+                return 'new';
+            }
+            
             const hashMatch = hash.match(/[&#]id=(\d+)/);
             if (hashMatch) {
                 recordId = hashMatch[1];
@@ -829,21 +860,32 @@ export class BPMNOwlComponent extends Component {
                          formView.getAttribute('data-record-id') ||
                          formView.dataset.resId ||
                          formView.dataset.recordId;
-            if (resId) {
+            if (resId && resId !== 'false' && resId !== 'null') {
                 console.log('BPMNOwlComponent: Found record ID in form view:', resId);
                 return resId;
+            } else if (resId === 'false' || resId === 'null' || !resId) {
+                console.log('BPMNOwlComponent: Form view indicates new record');
+                return 'new';
             }
         }
         
-        // Strategy 5: Legacy DOM extraction
+        // Strategy 5: Check for new record indicators in DOM
+        const saveButton = document.querySelector('.o_form_button_save');
+        const createButton = document.querySelector('.o_form_button_create');
+        if (saveButton && saveButton.style.display !== 'none' && !createButton) {
+            console.log('BPMNOwlComponent: Save button visible, likely new record');
+            return 'new';
+        }
+        
+        // Strategy 6: Legacy DOM extraction
         recordId = this.extractRecordIdFromDOM();
         if (recordId) {
             console.log('BPMNOwlComponent: Found record ID via legacy DOM extraction:', recordId);
             return recordId;
         }
         
-        console.log('BPMNOwlComponent: No record ID found in URL or DOM');
-        return null;
+        console.log('BPMNOwlComponent: No record ID found, assuming new record');
+        return 'new';
     }
 
     /**
@@ -967,6 +1009,7 @@ export class BPMNOwlComponent extends Component {
             url: window.location.href,
             urlPath: window.location.pathname,
             urlPathRecordId: urlPathMatch ? urlPathMatch[1] : null,
+            isNewRecord: detectedId === 'new',
             dbConnected: this.state.dbConnected,
             recordId: this.state.recordId,
             hasXmlField: !!xmlField,
@@ -1039,6 +1082,9 @@ export class BPMNOwlComponent extends Component {
     getCurrentRecordId() {
         // Use the enhanced detection method
         const recordId = this.detectRecordId();
+        if (recordId === 'new') {
+            return null; // Treat 'new' as null for comparison purposes
+        }
         return recordId ? parseInt(recordId) : null;
     }
 
@@ -1046,7 +1092,11 @@ export class BPMNOwlComponent extends Component {
      * Get current database field value
      */
     getDatabaseFieldValue() {
-        const xmlField = document.querySelector('textarea[id*="bpmn_xml"]');
+        // Try multiple selectors to find the BPMN XML field
+        const xmlField = document.querySelector('textarea[name="bpmn_xml"]') ||
+                        document.querySelector('textarea[id*="bpmn_xml"]') ||
+                        document.querySelector('#bpmn_xml_editor_field') ||
+                        document.querySelector('.o_field_text[data-field-name="bpmn_xml"]');
         return xmlField ? xmlField.value.trim() : '';
     }
 
