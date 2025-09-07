@@ -1317,12 +1317,12 @@ export class BPMNOwlComponent extends Component {
             this.state.error = false;
             this.state.message = "📝 Creating default BPMN diagram...";
             
-            // Check if BPMN.js is available
+            // Check if BPMN.js Modeler is available
             if (typeof window.BpmnJS === 'undefined') {
-                throw new Error('BPMN.js library not loaded. Please refresh the page.');
+                throw new Error('BPMN.js Modeler library not loaded. Please refresh the page.');
             }
             
-            // Clean up existing viewer if any
+            // Clean up existing modeler if any
             if (this.viewer) {
                 for (const [eventName, handler] of this.eventListeners) {
                     this.viewer.off(eventName, handler);
@@ -1332,9 +1332,12 @@ export class BPMNOwlComponent extends Component {
                 this.viewer = null;
             }
             
-            // Create new viewer
+            // Create new modeler (with editing capabilities)
             this.viewer = new window.BpmnJS({
-                container: this.containerRef.el
+                container: this.containerRef.el,
+                keyboard: {
+                    bindTo: window
+                }
             });
             
             // Setup event bridge
@@ -1513,15 +1516,15 @@ export class BPMNOwlComponent extends Component {
                     throw new Error('Invalid BPMN XML format detected in database. Please ensure the content is valid BPMN 2.0 XML.');
                 }
 
-                // Check if BPMN.js is available
+                // Check if BPMN.js Modeler is available
                 if (typeof window.BpmnJS === 'undefined') {
-                    throw new Error('BPMN.js library not loaded. Please refresh the page.');
+                    throw new Error('BPMN.js Modeler library not loaded. Please refresh the page.');
                 }
 
-                // Clean up existing viewer with comprehensive cleanup
+                // Clean up existing modeler with comprehensive cleanup
                 if (this.viewer) {
                     await this.safeExecute(async () => {
-                        // Perform partial cleanup for existing viewer
+                        // Perform partial cleanup for existing modeler
                         for (const [eventName, handler] of this.eventListeners) {
                             this.viewer.off(eventName, handler);
                         }
@@ -1529,7 +1532,7 @@ export class BPMNOwlComponent extends Component {
                         
                         this.viewer.destroy();
                         this.viewer = null;
-                    }, 'viewer cleanup');
+                    }, 'modeler cleanup');
                 }
 
                 // Check again if component is destroyed during async operations
@@ -1537,15 +1540,18 @@ export class BPMNOwlComponent extends Component {
                     throw new Error('Component destroyed during load operation');
                 }
 
-                // Create new viewer with error boundary
+                // Create new modeler with error boundary
                 this.viewer = await this.safeExecute(async () => {
-                    const viewer = new window.BpmnJS({
-                        container: this.containerRef.el
+                    const modeler = new window.BpmnJS({
+                        container: this.containerRef.el,
+                        keyboard: {
+                            bindTo: window
+                        }
                     });
                     
                     // Track any canvas contexts created by BPMN.js (defensive approach)
                     try {
-                        const canvas = viewer.get('canvas');
+                        const canvas = modeler.get('canvas');
                         if (canvas) {
                             // Try different ways to access canvas context safely
                             let canvasContext = null;
@@ -1567,11 +1573,11 @@ export class BPMNOwlComponent extends Component {
                         console.warn('BPMNOwlComponent: Could not track canvas context:', error);
                     }
                     
-                    return viewer;
-                }, 'viewer creation');
+                    return modeler;
+                }, 'modeler creation');
 
                 if (!this.viewer) {
-                    throw new Error('Failed to create BPMN viewer');
+                    throw new Error('Failed to create BPMN modeler');
                 }
 
                 // Setup event bridging with error boundary
@@ -1892,8 +1898,8 @@ export class BPMNOwlComponent extends Component {
      * Save the current BPMN diagram to the database
      */
     async saveDiagramToDatabase() {
-        if (!this.bpmnViewer) {
-            this.state.error = 'BPMN viewer not initialized';
+        if (!this.viewer) {
+            this.state.error = 'BPMN modeler not initialized';
             return;
         }
 
@@ -1902,7 +1908,7 @@ export class BPMNOwlComponent extends Component {
             this.state.error = null;
 
             // Get the current XML from the modeler
-            const result = await this.bpmnViewer.saveXML({ format: true });
+            const result = await this.viewer.saveXML({ format: true });
             const xmlContent = result.xml;
 
             // Simply update the form field and let Odoo handle everything else
