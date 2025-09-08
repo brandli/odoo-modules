@@ -134,28 +134,50 @@ export class BPMNOwlComponent extends Component {
                 </button>
             </div>
             
-            <!-- BPMN Canvas -->
-            <div class="card">
-                <div t-ref="bpmnContainer" 
-                     class="bpmn-canvas card-body p-0" 
-                     style="height: 500px; background: #fff;">
-                    <div t-if="!state.loaded" 
-                         class="d-flex align-items-center justify-content-center h-100">
-                        <div class="text-center text-muted">
-                            <div t-if="state.loading">
-                                <i class="fa fa-spinner fa-spin fa-2x mb-3"/>
-                                <div>Loading diagram...</div>
-                            </div>
-                            <div t-else="">
-                                <i class="fa fa-sitemap fa-2x mb-3"/>
-                                <div>No diagram loaded</div>
-                                <div class="small mt-2">
-                                    <button type="button" 
-                                            class="btn btn-outline-primary btn-sm mt-2" 
-                                            t-on-click="createDefaultDiagram">
-                                        <i class="fa fa-plus me-1"/>Create Default Diagram
-                                    </button>
+            <!-- BPMN Canvas and Properties Panel Layout -->
+            <div class="row">
+                <!-- BPMN Canvas -->
+                <div class="col-lg-8">
+                    <div class="card">
+                        <div t-ref="bpmnContainer" 
+                             class="bpmn-canvas card-body p-0" 
+                             style="height: 500px; background: #fff;">
+                            <div t-if="!state.loaded" 
+                                 class="d-flex align-items-center justify-content-center h-100">
+                                <div class="text-center text-muted">
+                                    <div t-if="state.loading">
+                                        <i class="fa fa-spinner fa-spin fa-2x mb-3"/>
+                                        <div>Loading diagram...</div>
+                                    </div>
+                                    <div t-else="">
+                                        <i class="fa fa-sitemap fa-2x mb-3"/>
+                                        <div>No diagram loaded</div>
+                                        <div class="small mt-2">
+                                            <button type="button" 
+                                                    class="btn btn-outline-primary btn-sm mt-2" 
+                                                    t-on-click="createDefaultDiagram">
+                                                <i class="fa fa-plus me-1"/>Create Default Diagram
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Properties Panel (Phase 1.1 - Basic Editing) -->
+                <div class="col-lg-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0 text-secondary">
+                                <i class="fa fa-cogs me-2"/>Properties
+                            </h6>
+                        </div>
+                        <div id="properties-panel" class="card-body p-2" style="height: 500px; overflow-y: auto;">
+                            <div t-if="!state.selectedElement" class="text-center text-muted mt-5">
+                                <i class="fa fa-mouse-pointer fa-2x mb-3"/>
+                                <div>Select an element to edit its properties</div>
                             </div>
                         </div>
                     </div>
@@ -677,13 +699,13 @@ export class BPMNOwlComponent extends Component {
         console.log(`BPMNOwlComponent: Attempting recovery (attempt ${this.recoveryAttempts})`);
         
         try {
-            // Test if BPMN.js is available
-            if (typeof window.BpmnJS === 'undefined') {
-                throw new Error('BPMN.js library still not available');
+            // Test if BPMN.js Modeler is available
+            if (typeof window.BpmnModeler === 'undefined') {
+                throw new Error('BPMN.js Modeler library still not available');
             }
             
             // Test basic functionality
-            const testViewer = new window.BpmnJS();
+            const testViewer = new window.BpmnModeler();
             testViewer.destroy(); // Immediate cleanup
             
             // Recovery successful
@@ -1318,7 +1340,7 @@ export class BPMNOwlComponent extends Component {
             this.state.message = "📝 Creating default BPMN diagram...";
             
             // Check if BPMN.js Modeler is available
-            if (typeof window.BpmnJS === 'undefined') {
+            if (typeof window.BpmnModeler === 'undefined') {
                 throw new Error('BPMN.js Modeler library not loaded. Please refresh the page.');
             }
             
@@ -1333,10 +1355,13 @@ export class BPMNOwlComponent extends Component {
             }
             
             // Create new modeler (with editing capabilities)
-            this.viewer = new window.BpmnJS({
+            this.viewer = new window.BpmnModeler({
                 container: this.containerRef.el,
                 keyboard: {
                     bindTo: window
+                },
+                propertiesPanel: {
+                    parent: '#properties-panel'
                 }
             });
             
@@ -1517,7 +1542,7 @@ export class BPMNOwlComponent extends Component {
                 }
 
                 // Check if BPMN.js Modeler is available
-                if (typeof window.BpmnJS === 'undefined') {
+                if (typeof window.BpmnModeler === 'undefined') {
                     throw new Error('BPMN.js Modeler library not loaded. Please refresh the page.');
                 }
 
@@ -1542,10 +1567,13 @@ export class BPMNOwlComponent extends Component {
 
                 // Create new modeler with error boundary
                 this.viewer = await this.safeExecute(async () => {
-                    const modeler = new window.BpmnJS({
+                    const modeler = new window.BpmnModeler({
                         container: this.containerRef.el,
                         keyboard: {
                             bindTo: window
+                        },
+                        propertiesPanel: {
+                            parent: '#properties-panel'
                         }
                     });
                     
