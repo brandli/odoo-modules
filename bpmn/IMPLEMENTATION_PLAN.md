@@ -30,9 +30,15 @@ The module currently provides:
 - [x] Test basic editing functionality (element creation, deletion)
 
 **Files modified:**
-- `__manifest__.py` - Updated to use CDN links for BPMN.js modeler
-- `static/src/js/bpmn_component.js` - Updated to use BpmnModeler instead of viewer
+- `__manifest__.py` - Updated to use CDN links for BPMN.js modeler and properties panel
+- `static/src/js/bpmn_component.js` - Updated to use BpmnModeler instead of BpmnJS viewer, added properties panel support
 - Removed: `static/lib/bpmn-js/` (using CDN instead)
+
+**CDN Dependencies Added:**
+- `https://unpkg.com/bpmn-js@17.7.1/dist/bpmn-modeler.development.js`
+- `https://unpkg.com/bpmn-js@17.7.1/dist/assets/bpmn-js.css`
+- `https://unpkg.com/bpmn-js-properties-panel@5.6.0/dist/bpmn-js-properties-panel.js`
+- `https://unpkg.com/bpmn-js-properties-panel@5.6.0/dist/assets/properties-panel.css`
 
 #### 1.2 Update Backend Model for Editing
 **Priority: High**
