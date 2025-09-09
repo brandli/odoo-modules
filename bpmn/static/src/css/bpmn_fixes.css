@@ -1,0 +1,101 @@
+/* BPMN.js Custom Styles - Fix for hover/highlight issues */
+
+/* Completely hide the problematic overlay elements that cause black blobs */
+.layer-overlays .djs-segment-dragger,
+.layer-overlays .djs-bendpoints {
+    display: none !important;
+}
+
+/* Only show overlay elements when explicitly selecting connections for editing */
+.djs-connection.selected ~ .layer-overlays .djs-segment-dragger,
+.djs-connection.selected ~ .layer-overlays .djs-bendpoints,
+.djs-element.selected ~ .layer-overlays .djs-segment-dragger,
+.djs-element.selected ~ .layer-overlays .djs-bendpoints {
+    display: block !important;
+}
+
+/* If overlays do show, style them properly */
+.djs-bendpoints .djs-bendpoint circle.djs-visual {
+    fill: #ffffff !important;
+    stroke: #1f85ff !important;
+    stroke-width: 2px !important;
+    opacity: 0.8 !important;
+}
+
+.djs-bendpoints .djs-bendpoint circle.djs-hit {
+    fill: transparent !important;
+    stroke: none !important;
+}
+
+.djs-segment-dragger rect.djs-visual {
+    fill: #1f85ff !important;
+    stroke: #ffffff !important;
+    stroke-width: 1px !important;
+    opacity: 0.8 !important;
+}
+
+.djs-segment-dragger rect.djs-hit {
+    fill: transparent !important;
+    stroke: none !important;
+}
+
+/* Remove the dashed outline that appears around elements */
+.djs-outline {
+    display: none !important;
+}
+
+/* Clean hover effects for connections - only change stroke color/width */
+.djs-connection:hover path {
+    stroke: #1f85ff !important;
+    stroke-width: 3px !important;
+}
+
+.djs-connection:not(:hover) path {
+    stroke: rgb(34, 36, 42) !important;
+    stroke-width: 2px !important;
+}
+
+/* Clean hover effects for shapes */
+.djs-shape:hover .djs-visual > :first-child {
+    stroke: #1f85ff !important;
+    stroke-width: 2px !important;
+}
+
+.djs-shape:not(:hover) .djs-visual > :first-child {
+    stroke: rgb(34, 36, 42) !important;
+    stroke-width: 1px !important;
+}
+
+/* Selection highlighting - only for selected elements */
+.djs-element.selected .djs-visual > :first-child {
+    stroke: #ff6900 !important;
+    stroke-width: 2px !important;
+}
+
+.djs-connection.selected path {
+    stroke: #ff6900 !important;
+    stroke-width: 3px !important;
+}
+
+/* Ensure smooth transitions */
+.djs-connection path,
+.djs-shape .djs-visual > :first-child {
+    transition: stroke 0.15s ease, stroke-width 0.15s ease !important;
+}
+
+/* Ensure proper cursor behavior */
+.djs-element:hover {
+    cursor: pointer !important;
+}
+
+/* Container styles */
+.bpmn-owl-component .bpmn-container {
+    background: #ffffff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+/* Ensure the BPMN canvas doesn't inherit unwanted styles */
+.bpmn-owl-component .bjs-container svg {
+    background: transparent !important;
+}

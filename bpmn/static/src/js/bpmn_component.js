@@ -1172,12 +1172,49 @@ export class BPMNOwlComponent extends Component {
      * Get current database field value
      */
     getDatabaseFieldValue() {
+        console.log('BPMNOwlComponent: Searching for bpmn_xml field...');
+        
         // Try multiple selectors to find the BPMN XML field
-        const xmlField = document.querySelector('textarea[name="bpmn_xml"]') ||
-                        document.querySelector('textarea[id*="bpmn_xml"]') ||
-                        document.querySelector('#bpmn_xml_editor_field') ||
-                        document.querySelector('.o_field_text[data-field-name="bpmn_xml"]');
-        return xmlField ? xmlField.value.trim() : '';
+        // First try direct field selectors
+        let xmlField = document.querySelector('textarea[name="bpmn_xml"]') ||
+                      document.querySelector('textarea[id*="bpmn_xml"]') ||
+                      document.querySelector('#bpmn_xml_editor_field') ||
+                      document.querySelector('.o_field_text[data-field-name="bpmn_xml"]');
+        
+        console.log('BPMNOwlComponent: Direct field search result:', xmlField ? 'Found' : 'Not found');
+        
+        // If not found, try to find within notebook tabs (which might be hidden)
+        if (!xmlField) {
+            console.log('BPMNOwlComponent: Searching in all textareas...');
+            // Search in all tabs, even hidden ones
+            const allTextareas = document.querySelectorAll('textarea');
+            console.log(`BPMNOwlComponent: Found ${allTextareas.length} textarea elements`);
+            
+            for (const textarea of allTextareas) {
+                if (textarea.name === 'bpmn_xml' || 
+                    textarea.id.includes('bpmn_xml') ||
+                    textarea.getAttribute('data-field-name') === 'bpmn_xml') {
+                    xmlField = textarea;
+                    console.log('BPMNOwlComponent: Found bpmn_xml field in textarea search');
+                    break;
+                }
+            }
+        }
+        
+        // If still not found, try using OWL's props if available
+        if (!xmlField && this.props && this.props.record) {
+            console.log('BPMNOwlComponent: Trying to get value from props.record...');
+            const record = this.props.record;
+            if (record.data && record.data.bpmn_xml !== undefined) {
+                const propValue = record.data.bpmn_xml || '';
+                console.log(`BPMNOwlComponent: Got value from props, length: ${propValue.length}`);
+                return propValue;
+            }
+        }
+        
+        const fieldValue = xmlField ? xmlField.value.trim() : '';
+        console.log(`BPMNOwlComponent: Final field value length: ${fieldValue.length}`);
+        return fieldValue;
     }
 
     /**

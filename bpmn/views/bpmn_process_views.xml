@@ -18,7 +18,7 @@
         <field name="name">bpmn.process.form</field>
         <field name="model">bpmn.process</field>
         <field name="arch" type="xml">
-            <form>
+                        <form string="BPMN Process">
                 <sheet>
                     <div class="oe_title">
                         <h1>
@@ -28,33 +28,63 @@
                     <group>
                         <group>
                             <field name="description"/>
+                            <field name="version" readonly="1"/>
+                            <field name="last_modified_by" readonly="1"/>
                         </group>
                         <group>
                             <field name="active"/>
+                            <field name="auto_save_enabled"/>
+                            <field name="last_auto_save" readonly="1"/>
                         </group>
                     </group>
                     
-                    <!-- BPMN Component Integration -->
-                    <div style="margin: 20px 0;">
-                        <div id="bpmn-owl-mount-point" data-unique-viewer="true">
-                            <!-- BPMN component will be auto-mounted here -->
-                        </div>
-                    </div>
-                    
-                    <!-- BPMN XML Editor -->
-                    <div style="margin-top: 30px;">
-                        <div class="o_horizontal_separator">BPMN XML Source Code</div>
-                        <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 10px; margin-top: 10px;">
-                            <div style="background: #e9ecef; padding: 5px 10px; margin: -10px -10px 10px -10px; border-radius: 3px 3px 0 0; font-size: 12px; color: #6c757d;">
-                                <i class="fa fa-code"/> XML Editor - Edit your BPMN 2.0 definition below
+                    <notebook>
+                        <page string="BPMN Diagram" name="bpmn_diagram">
+                            <!-- BPMN Component Integration -->
+                            <div style="margin: 20px 0;">
+                                <div id="bpmn-owl-mount-point" data-unique-viewer="true">
+                                    <!-- BPMN component will be auto-mounted here -->
+                                </div>
                             </div>
-                            <field name="bpmn_xml" widget="text" nolabel="1" 
-                                   style="min-height: 300px; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; 
-                                          background: #ffffff; border: 1px solid #ced4da; border-radius: 3px; 
-                                          padding: 10px; font-size: 13px; line-height: 1.4;" 
-                                   placeholder="Enter your BPMN 2.0 XML definition here..."/>
-                        </div>
-                    </div>
+                            
+                            <!-- BPMN XML Editor -->
+                            <div style="margin-top: 30px;">
+                                <div class="o_horizontal_separator">BPMN XML Source Code</div>
+                                <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 10px; margin-top: 10px;">
+                                    <div style="background: #e9ecef; padding: 5px 10px; margin: -10px -10px 10px -10px; border-radius: 3px 3px 0 0; font-size: 12px; color: #6c757d;">
+                                        <i class="fa fa-code"/> XML Editor - Edit your BPMN 2.0 definition below
+                                    </div>
+                                    <field name="bpmn_xml" widget="text" nolabel="1" 
+                                           style="min-height: 300px; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; 
+                                                  background: #ffffff; border: 1px solid #ced4da; border-radius: 3px; 
+                                                  padding: 10px; font-size: 13px; line-height: 1.4;" 
+                                           placeholder="Enter your BPMN 2.0 XML definition here..."/>
+                                </div>
+                            </div>
+                        </page>
+                        
+                        <page string="Version History" name="version_history">
+                            <field name="version_history_ids" nolabel="1">
+                                <list string="Version History" default_order="created_date desc">
+                                    <field name="version_number"/>
+                                    <field name="description"/>
+                                    <field name="change_type"/>
+                                    <field name="created_by"/>
+                                    <field name="created_date"/>
+                                    <field name="file_size"/>
+                                    <button name="action_restore_version" 
+                                            type="object" 
+                                            string="Restore" 
+                                            class="btn-link"
+                                            confirm="Are you sure you want to restore to this version? This will create a new version."/>
+                                    <button name="action_compare_with_current" 
+                                            type="object" 
+                                            string="Compare" 
+                                            class="btn-link"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
                 </sheet>
             </form>
         </field>

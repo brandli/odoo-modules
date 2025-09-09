@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- BPMN Process Version List View -->
+    <record id="view_bpmn_process_version_tree" model="ir.ui.view">
+        <field name="name">bpmn.process.version.tree</field>
+        <field name="model">bpmn.process.version</field>
+        <field name="arch" type="xml">
+            <list string="Version History" default_order="created_date desc">
+                <field name="process_id"/>
+                <field name="version_number"/>
+                <field name="description"/>
+                <field name="change_type"/>
+                <field name="created_by"/>
+                <field name="created_date"/>
+                <field name="file_size"/>
+                <button name="action_restore_version" 
+                        type="object" 
+                        string="Restore" 
+                        class="btn-link"
+                        confirm="Are you sure you want to restore to this version?"/>
+                <button name="action_compare_with_current" 
+                        type="object" 
+                        string="Compare" 
+                        class="btn-link"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- BPMN Process Version Form View -->
+    <record id="view_bpmn_process_version_form" model="ir.ui.view">
+        <field name="name">bpmn.process.version.form</field>
+        <field name="model">bpmn.process.version</field>
+        <field name="arch" type="xml">
+            <form string="BPMN Process Version" create="false" edit="false">
+                <header>
+                    <button name="action_restore_version" 
+                            type="object" 
+                            string="Restore This Version" 
+                            class="btn-primary"
+                            confirm="Are you sure you want to restore to this version? This will create a new version."/>
+                    <button name="action_compare_with_current" 
+                            type="object" 
+                            string="Compare with Current" 
+                            class="btn-secondary"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="display_name"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="process_id"/>
+                            <field name="version_number"/>
+                            <field name="change_type"/>
+                        </group>
+                        <group>
+                            <field name="created_by"/>
+                            <field name="created_date"/>
+                            <field name="file_size"/>
+                        </group>
+                    </group>
+                    
+                    <notebook>
+                        <page string="Description" name="description">
+                            <field name="description" nolabel="1" placeholder="Description of changes in this version..."/>
+                        </page>
+                        
+                        <page string="BPMN XML Snapshot" name="xml_snapshot">
+                            <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 10px;">
+                                <div style="background: #e9ecef; padding: 5px 10px; margin: -10px -10px 10px -10px; border-radius: 3px 3px 0 0; font-size: 12px; color: #6c757d;">
+                                    <i class="fa fa-code"/> BPMN XML Snapshot (Read-only)
+                                </div>
+                                <field name="bpmn_xml_snapshot" widget="text" nolabel="1" readonly="1"
+                                       style="min-height: 400px; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; 
+                                              background: #ffffff; border: 1px solid #ced4da; border-radius: 3px; 
+                                              padding: 10px; font-size: 13px; line-height: 1.4;"/>
+                            </div>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- BPMN Process Version Search View -->
+    <record id="view_bpmn_process_version_search" model="ir.ui.view">
+        <field name="name">bpmn.process.version.search</field>
+        <field name="model">bpmn.process.version</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="process_id"/>
+                <field name="version_number"/>
+                <field name="description"/>
+                <field name="created_by"/>
+                <filter string="Today" name="today" 
+                        domain="[('created_date', '&gt;=', context_today().strftime('%Y-%m-%d'))]"/>
+                <filter string="This Week" name="this_week" 
+                        domain="[('created_date', '&gt;=', (context_today() - datetime.timedelta(days=7)).strftime('%Y-%m-%d'))]"/>
+                <filter string="This Month" name="this_month" 
+                        domain="[('created_date', '&gt;=', (context_today().replace(day=1)).strftime('%Y-%m-%d'))]"/>
+                <group expand="0" string="Group By">
+                    <filter string="Process" name="group_process" context="{'group_by': 'process_id'}"/>
+                    <filter string="Change Type" name="group_change_type" context="{'group_by': 'change_type'}"/>
+                    <filter string="Created By" name="group_created_by" context="{'group_by': 'created_by'}"/>
+                    <filter string="Created Date" name="group_created_date" context="{'group_by': 'created_date:day'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- BPMN Process Version Action -->
+    <record id="action_bpmn_process_version" model="ir.actions.act_window">
+        <field name="name">BPMN Process Versions</field>
+        <field name="res_model">bpmn.process.version</field>
+        <field name="view_mode">list,form</field>
+        <field name="view_id" ref="view_bpmn_process_version_tree"/>
+        <field name="search_view_id" ref="view_bpmn_process_version_search"/>
+        <field name="context">{}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No version history found!
+            </p>
+            <p>
+                Version history is automatically created when BPMN processes are modified.
+                Each time a process is updated, a new version is created to track changes.
+            </p>
+        </field>
+    </record>
+
+    <!-- Add Version History menu item -->
+    <menuitem id="menu_bpmn_version_history" 
+              name="Version History" 
+              parent="menu_bpmn_root" 
+              action="action_bpmn_process_version" 
+              sequence="20"/>
+</odoo>

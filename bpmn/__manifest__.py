@@ -18,7 +18,9 @@ Interactive BPMN 2.0 diagram editor integrated with Odoo forms.
     'depends': ['base', 'web'],
     'data': [
         'security/ir.model.access.csv',
+        'security/bpmn_security.xml',
         'views/bpmn_process_views.xml',
+        'views/bpmn_process_version_views.xml',
         'data/demo_data.xml',
     ],
     'assets': {
@@ -26,6 +28,9 @@ Interactive BPMN 2.0 diagram editor integrated with Odoo forms.
             # BPMN.js modeler library and styles (local files for reliability)
             'bpmn/static/lib/bpmn-js/bpmn-modeler.development.js',
             'bpmn/static/lib/bpmn-js/bpmn-js.css',
+            
+            # Custom CSS fixes for BPMN.js styling issues
+            'bpmn/static/src/css/bpmn_fixes.css',
             
             # BPMN OWL Component (enhanced for editing)
             'bpmn/static/src/js/bpmn_component.js',

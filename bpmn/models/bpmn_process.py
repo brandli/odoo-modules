@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from odoo import models, fields, api
+from odoo import models, fields, api, _
+from odoo.exceptions import UserError
 
 
 class BPMNProcess(models.Model):
@@ -30,21 +31,127 @@ class BPMNProcess(models.Model):
         help="Whether this process is active"
     )
     
+    # Version tracking fields for Phase 1.2
+    version = fields.Integer(
+        string='Version',
+        default=1,
+        help="Current version number of the process"
+    )
+    
+    version_history_ids = fields.One2many(
+        'bpmn.process.version',
+        'process_id',
+        string='Version History',
+        help="History of all versions of this process"
+    )
+    
+    last_modified_by = fields.Many2one(
+        'res.users',
+        string='Last Modified By',
+        default=lambda self: self.env.user,
+        help="User who last modified this process"
+    )
+    
+    auto_save_enabled = fields.Boolean(
+        string='Auto-save Enabled',
+        default=True,
+        help="Whether auto-save is enabled for this process"
+    )
+    
+    last_auto_save = fields.Datetime(
+        string='Last Auto-save',
+        help="Timestamp of the last auto-save operation"
+    )
+    
     @api.model
     def create(self, vals):
-        """Override create to provide default BPMN XML if none provided"""
+        """Override create to provide default BPMN XML if none provided and create initial version"""
         if not vals.get('bpmn_xml'):
             vals['bpmn_xml'] = self._get_default_bpmn_xml(vals.get('name', 'New Process'))
         else:
             # Validate BPMN XML format
             self._validate_bpmn_xml(vals['bpmn_xml'])
-        return super().create(vals)
+        
+        # Ensure version starts at 1
+        if not vals.get('version'):
+            vals['version'] = 1
+            
+        # Set last modified by
+        vals['last_modified_by'] = self.env.user.id
+        
+        record = super().create(vals)
+        
+        # Create initial version history entry
+        record._create_version_entry('Initial version', 'create')
+        
+        return record
     
     def write(self, vals):
-        """Override write to validate BPMN XML when updated"""
+        """Override write to validate BPMN XML when updated and handle versioning"""
         if 'bpmn_xml' in vals and vals['bpmn_xml']:
             self._validate_bpmn_xml(vals['bpmn_xml'])
+            
+            # Check if this is a significant change (BPMN XML modification)
+            for record in self:
+                if record.bpmn_xml != vals['bpmn_xml']:
+                    # Increment version for significant changes
+                    vals['version'] = record.version + 1
+                    vals['last_modified_by'] = self.env.user.id
+                    
+                    # Create version history entry before updating
+                    record._create_version_entry('Updated BPMN XML', 'update')
+        
         return super().write(vals)
+    
+    def auto_save(self, xml_content):
+        """Perform auto-save operation with conflict detection"""
+        self.ensure_one()
+        
+        if not self.auto_save_enabled:
+            return {'success': False, 'error': 'Auto-save is disabled for this process'}
+        
+        try:
+            # Validate XML before saving
+            self._validate_bpmn_xml(xml_content)
+            
+            # Check for concurrent modifications (simple timestamp check)
+            if self.write_date and self.last_auto_save:
+                if self.write_date > self.last_auto_save:
+                    return {
+                        'success': False, 
+                        'error': 'Process was modified by another user. Please refresh and try again.',
+                        'conflict': True
+                    }
+            
+            # Perform auto-save
+            self.write({
+                'bpmn_xml': xml_content,
+                'last_auto_save': fields.Datetime.now()
+            })
+            
+            return {
+                'success': True,
+                'version': self.version,
+                'last_modified': self.write_date.isoformat() if self.write_date else None,
+                'message': 'Auto-save successful'
+            }
+            
+        except Exception as e:
+            return {'success': False, 'error': f'Auto-save failed: {str(e)}'}
+    
+    def _create_version_entry(self, description, change_type):
+        """Create a version history entry"""
+        self.ensure_one()
+        
+        self.env['bpmn.process.version'].create({
+            'process_id': self.id,
+            'version_number': self.version,
+            'bpmn_xml_snapshot': self.bpmn_xml,
+            'description': description,
+            'change_type': change_type,
+            'created_by': self.env.user.id,
+            'created_date': fields.Datetime.now()
+        })
     
     def _validate_bpmn_xml(self, xml_content):
         """Validate BPMN XML format to ensure database integrity"""
@@ -165,3 +272,24 @@ class BPMNProcess(models.Model):
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>'''
+    
+    def action_manual_version(self):
+        """Manually create a version snapshot"""
+        self.ensure_one()
+        
+        if not self.bpmn_xml:
+            raise UserError(_("Cannot create version: No BPMN content available"))
+        
+        description = f"Manual snapshot created on {fields.Datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        self._create_version_entry(description, 'manual')
+        
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'display_notification',
+            'params': {
+                'title': _('Version Created'),
+                'message': _('Manual version snapshot created successfully'),
+                'type': 'success',
+                'sticky': False,
+            }
+        }
