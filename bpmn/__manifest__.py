@@ -1,6 +1,6 @@
 {
     'name': 'BPMN',
-    'version': '18.0.1.1.0',
+    'version': '18.0.1.8.0',
     'author': 'Gentian',
     'category': 'Productivity',
     'summary': 'BPMN diagram editor for Odoo',

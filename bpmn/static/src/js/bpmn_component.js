@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-import { Component, useRef, onMounted, onWillDestroy, useState, xml } from "@odoo/owl";
+import { Component, useRef, onMounted, onWillDestroy, onPatched, useState, xml } from "@odoo/owl";
 import { registry as webRegistry } from "@web/core/registry";
 
 /**
@@ -191,7 +191,9 @@ export class BPMNOwlComponent extends Component {
             errorCount: 0,
             recoveryInProgress: false,
             // Track current XML content for change detection
-            currentXMLContent: ''
+            currentXMLContent: '',
+            // Loading state to prevent multiple simultaneous loads
+            isLoading: false
         });
         
         // Comprehensive memory management tracking
@@ -203,6 +205,8 @@ export class BPMNOwlComponent extends Component {
         this.observables = new Set(); // Track observables/subscriptions for cleanup
         this.domReferences = new WeakMap(); // Weak references to prevent memory leaks
         this.isDestroyed = false; // Prevent operations after destruction
+        this.intersectionObserver = null; // Track visibility changes
+        this.isVisible = true; // Track current visibility state
         
         // Error boundary and circuit breaker patterns
         this.errorCount = 0; // Track consecutive errors
@@ -222,6 +226,12 @@ export class BPMNOwlComponent extends Component {
             
             // Initialize database connection and field monitoring
             this.initializeDatabaseConnection();
+            
+            // Setup visibility observer for tab switching
+            this.setupVisibilityObserver();
+            
+            // Check if this is a remount after tab switch
+            this.handlePotentialRemount();
             
             // Phase 1: Auto-load diagram if XML data is present in database
             this.safeSetTimeout(() => {
@@ -260,8 +270,16 @@ export class BPMNOwlComponent extends Component {
             }, 3000); // Even longer delay as fallback
         });
         
+        onPatched(() => {
+            // OWL lifecycle hook - called after each re-render
+            this.handleComponentPatched();
+        });
+        
         onWillDestroy(() => {
             this.isDestroyed = true;
+            
+            // Cleanup visibility observer
+            this.cleanupVisibilityObserver();
             
             this.performComprehensiveCleanup();
         });
@@ -325,6 +343,16 @@ export class BPMNOwlComponent extends Component {
                     if (eventName === 'keydown') {
                         // Remove document-level keyboard listener
                         document.removeEventListener('keydown', handler);
+                    } else if (eventName === 'container-focus') {
+                        // Remove container focus listener
+                        if (this.containerRef.el) {
+                            this.containerRef.el.removeEventListener('focus', handler, true);
+                        }
+                    } else if (eventName === 'container-click') {
+                        // Remove container click listener
+                        if (this.containerRef.el) {
+                            this.containerRef.el.removeEventListener('click', handler, true);
+                        }
                     } else {
                         // Remove BPMN viewer event listeners
                         this.viewer.off(eventName, handler);
@@ -407,8 +435,439 @@ export class BPMNOwlComponent extends Component {
             console.warn('BPMNOwlComponent: Error resetting state:', error);
         }
         
-        // 8. Clear WeakMap references
+        // 9. Cleanup visibility observer
+        this.cleanupVisibilityObserver();
+        
+        // 10. Clear WeakMap references
         this.domReferences = new WeakMap();
+    }
+
+    /**
+     * Setup visibility observer for tab switching detection
+     * This is the elegant OWL/Odoo way to handle component visibility
+     */
+    setupVisibilityObserver() {
+        if (!this.containerRef.el || this.isDestroyed) return;
+        
+        console.log('BPMNOwlComponent: Setting up visibility observer for tab switching...');
+        
+        // Method 1: IntersectionObserver for visibility changes
+        this.intersectionObserver = new IntersectionObserver((entries) => {
+            if (this.isDestroyed) return;
+            
+            const entry = entries[0];
+            const isVisible = entry.isIntersecting && entry.intersectionRatio > 0;
+            
+            if (isVisible !== this.isVisible) {
+                console.log('BPMNOwlComponent: Visibility changed:', this.isVisible, '→', isVisible);
+                this.isVisible = isVisible;
+                
+                if (isVisible) {
+                    // Component became visible (tab activated) - add small delay to ensure DOM is ready
+                    this.safeSetTimeout(() => {
+                        this.handleTabActivated();
+                    }, 100);
+                } else {
+                    // Component became hidden (tab deactivated)
+                    this.handleTabDeactivated();
+                }
+            }
+        }, {
+            threshold: [0, 0.1] // Trigger when component becomes visible or invisible
+        });
+        
+        this.intersectionObserver.observe(this.containerRef.el);
+        
+        // Method 2: Additional visibility check using focus/blur events on container
+        const containerFocusHandler = () => {
+            if (this.isDestroyed) return;
+            console.log('BPMNOwlComponent: Container focus detected - checking visibility...');
+            this.safeSetTimeout(() => {
+                this.checkAndHandleVisibilityChange();
+            }, 50);
+        };
+        
+        const containerClickHandler = () => {
+            if (this.isDestroyed) return;
+            console.log('BPMNOwlComponent: Container click detected - checking visibility...');
+            this.safeSetTimeout(() => {
+                this.checkAndHandleVisibilityChange();
+            }, 50);
+        };
+        
+        this.containerRef.el.addEventListener('focus', containerFocusHandler, true);
+        this.containerRef.el.addEventListener('click', containerClickHandler, true);
+        
+        // Track these for cleanup
+        this.eventListeners.set('container-focus', containerFocusHandler);
+        this.eventListeners.set('container-click', containerClickHandler);
+        
+        // Method 3: Periodic visibility check as fallback
+        const periodicCheck = () => {
+            if (this.isDestroyed) return;
+            this.checkAndHandleVisibilityChange();
+            this.safeSetTimeout(periodicCheck, 2000); // Check every 2 seconds
+        };
+        this.safeSetTimeout(periodicCheck, 2000);
+        
+        console.log('BPMNOwlComponent: Visibility observer setup complete');
+    }
+    
+    /**
+     * Manual visibility check and handling
+     */
+    checkAndHandleVisibilityChange() {
+        if (this.isDestroyed || !this.containerRef.el) return;
+        
+        // Check if container is actually visible in viewport
+        const rect = this.containerRef.el.getBoundingClientRect();
+        const isCurrentlyVisible = rect.width > 0 && rect.height > 0 && 
+                                  rect.top < window.innerHeight && rect.bottom > 0;
+        
+        if (isCurrentlyVisible !== this.isVisible) {
+            console.log('BPMNOwlComponent: Manual visibility check - changed:', this.isVisible, '→', isCurrentlyVisible);
+            this.isVisible = isCurrentlyVisible;
+            
+            if (isCurrentlyVisible) {
+                this.handleTabActivated();
+            } else {
+                this.handleTabDeactivated();
+            }
+        }
+    }
+    
+    /**
+     * Cleanup visibility observer
+     */
+    cleanupVisibilityObserver() {
+        if (this.intersectionObserver) {
+            this.intersectionObserver.disconnect();
+            this.intersectionObserver = null;
+            console.log('BPMNOwlComponent: Visibility observer cleaned up');
+        }
+    }
+    
+    /**
+     * Handle potential remount after tab switch
+     * Since Odoo may destroy/recreate components during tab switches,
+     * we use localStorage to persist state across remounts
+     */
+    handlePotentialRemount() {
+        console.log('BPMNOwlComponent: Checking for remount after tab switch...');
+        
+        try {
+            const recordId = this.detectRecordId();
+            if (!recordId) return;
+            
+            // Check if we have persisted state for this record
+            const stateKey = `bpmn_component_state_${recordId}`;
+            const persistedState = localStorage.getItem(stateKey);
+            
+            if (persistedState) {
+                console.log('BPMNOwlComponent: Found persisted state from previous mount');
+                
+                try {
+                    const parsed = JSON.parse(persistedState);
+                    
+                    // Restore state
+                    if (parsed.currentXMLContent) {
+                        this.state.currentXMLContent = parsed.currentXMLContent;
+                        console.log('BPMNOwlComponent: Restored XML content from localStorage');
+                        
+                        // Force load the diagram immediately
+                        this.safeSetTimeout(() => {
+                            console.log('BPMNOwlComponent: Loading diagram from persisted state...');
+                            this.loadDiagramFromPersistedState(parsed.currentXMLContent);
+                        }, 200);
+                    }
+                    
+                    // Restore other relevant state
+                    if (parsed.hasSaveableContent !== undefined) {
+                        this.state.hasSaveableContent = parsed.hasSaveableContent;
+                    }
+                    if (parsed.diagramTitle) {
+                        this.state.diagramTitle = parsed.diagramTitle;
+                    }
+                    if (parsed.elementCount) {
+                        this.state.elementCount = parsed.elementCount;
+                    }
+                    
+                } catch (parseError) {
+                    console.warn('BPMNOwlComponent: Error parsing persisted state:', parseError);
+                    localStorage.removeItem(stateKey);
+                }
+            }
+            
+            // Clean up old states periodically
+            this.cleanupOldPersistedStates();
+        } catch (error) {
+            console.warn('BPMNOwlComponent: Error handling remount:', error);
+        }
+    }
+    
+    /**
+     * Load diagram from persisted state (faster than database reload)
+     */
+    async loadDiagramFromPersistedState(xmlContent) {
+        if (!xmlContent || this.isDestroyed) return;
+        
+        console.log('BPMNOwlComponent: Loading diagram from persisted XML content...');
+        
+        try {
+            this.state.loading = true;
+            this.state.error = false;
+            
+            // Check if BPMN.js is available
+            if (typeof window.BpmnJS === 'undefined') {
+                throw new Error('BPMN.js library not available');
+            }
+            
+            // Clean up existing viewer
+            if (this.viewer) {
+                this.viewer.destroy();
+                this.viewer = null;
+            }
+            
+            // Create new viewer
+            this.viewer = new window.BpmnJS({
+                container: this.containerRef.el,
+                keyboard: { bindTo: window }
+            });
+            
+            // Setup events
+            this.setupEventBridge();
+            
+            // Import XML
+            await this.viewer.importXML(xmlContent);
+            
+            // Success state
+            this.state.loaded = true;
+            this.state.hasSaveableContent = true;
+            this.state.loading = false;
+            this.state.error = false;
+            this.state.message = "";
+            this.state.currentXMLContent = xmlContent;
+            
+            // Update diagram info
+            this.updateDiagramInfo();
+            
+            console.log('BPMNOwlComponent: Diagram loaded successfully from persisted state');
+            
+        } catch (error) {
+            console.error('BPMNOwlComponent: Failed to load from persisted state:', error);
+            this.state.loading = false;
+            this.state.error = true;
+            this.state.message = `❌ Failed to restore diagram: ${error.message}`;
+            
+            // Fallback to database load
+            this.safeSetTimeout(() => {
+                this.autoLoadDiagramFromDatabase();
+            }, 500);
+        }
+    }
+    
+    /**
+     * Persist component state to localStorage for tab switching
+     */
+    persistComponentState() {
+        try {
+            const recordId = this.detectRecordId();
+            if (!recordId || recordId === 'new') return;
+            
+            const stateKey = `bpmn_component_state_${recordId}`;
+            const stateToSave = {
+                currentXMLContent: this.state.currentXMLContent,
+                hasSaveableContent: this.state.hasSaveableContent,
+                diagramTitle: this.state.diagramTitle,
+                elementCount: this.state.elementCount,
+                timestamp: Date.now()
+            };
+            
+            localStorage.setItem(stateKey, JSON.stringify(stateToSave));
+            console.log('BPMNOwlComponent: State persisted to localStorage');
+            
+        } catch (error) {
+            console.warn('BPMNOwlComponent: Error persisting state:', error);
+        }
+    }
+    
+    /**
+     * Clean up old persisted states (keep only recent ones)
+     */
+    cleanupOldPersistedStates() {
+        try {
+            const keys = Object.keys(localStorage);
+            const bpmnKeys = keys.filter(key => key.startsWith('bpmn_component_state_'));
+            const now = Date.now();
+            const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+            
+            bpmnKeys.forEach(key => {
+                try {
+                    const state = JSON.parse(localStorage.getItem(key));
+                    if (!state.timestamp || (now - state.timestamp) > maxAge) {
+                        localStorage.removeItem(key);
+                        console.log('BPMNOwlComponent: Cleaned up old persisted state:', key);
+                    }
+                } catch (error) {
+                    // Remove invalid entries
+                    localStorage.removeItem(key);
+                }
+            });
+        } catch (error) {
+            console.warn('BPMNOwlComponent: Error cleaning up persisted states:', error);
+        }
+    }
+    
+    /**
+     * Handle tab activation - elegant re-attachment of BPMN viewer
+     */
+    async handleTabActivated() {
+        console.log('BPMNOwlComponent: Tab activated - checking if diagram needs restoration...');
+        
+        if (this.isDestroyed) return;
+        
+        // Check if we have a viewer but the container is empty or detached
+        const hasViewer = !!this.viewer;
+        const shouldHaveDiagram = this.state.loaded && this.state.currentXMLContent;
+        const containerIsEmpty = !this.containerRef.el.querySelector('.bjs-container') && 
+                                !this.containerRef.el.querySelector('svg');
+        
+        console.log('BPMNOwlComponent: Tab activation status:', {
+            hasViewer,
+            shouldHaveDiagram,
+            containerIsEmpty,
+            loaded: this.state.loaded,
+            hasXMLContent: !!this.state.currentXMLContent
+        });
+        
+        if (hasViewer && shouldHaveDiagram && containerIsEmpty) {
+            console.log('BPMNOwlComponent: Diagram needs restoration after tab switch');
+            
+            try {
+                // Re-attach the viewer to the container
+                await this.restoreDiagramAfterTabSwitch();
+            } catch (error) {
+                console.warn('BPMNOwlComponent: Failed to restore diagram after tab switch:', error);
+                // Fallback: reload from database
+                this.autoLoadDiagramFromDatabase();
+            }
+        } else if (!hasViewer && shouldHaveDiagram) {
+            console.log('BPMNOwlComponent: No viewer but have content - auto-loading...');
+            this.autoLoadDiagramFromDatabase();
+        } else if (hasViewer && shouldHaveDiagram && !containerIsEmpty) {
+            console.log('BPMNOwlComponent: Diagram already restored and visible');
+        } else if (!shouldHaveDiagram && this.state.currentXMLContent) {
+            console.log('BPMNOwlComponent: Have XML content but diagram not loaded - loading...');
+            this.autoLoadDiagramFromDatabase();
+        } else {
+            console.log('BPMNOwlComponent: No restoration needed - state OK');
+        }
+    }
+    
+    /**
+     * Handle tab deactivation - preserve viewer instance
+     */
+    handleTabDeactivated() {
+        console.log('BPMNOwlComponent: Tab deactivated - preserving viewer instance...');
+        
+        // Don't destroy the viewer, just note that it's hidden
+        // This preserves the instance and avoids recreation overhead
+        if (this.viewer && this.state.loaded) {
+            console.log('BPMNOwlComponent: Viewer preserved during tab switch');
+            
+            // Persist current state before tab switch
+            this.persistComponentState();
+        }
+    }
+    
+    /**
+     * Restore diagram after tab switch using elegant re-attachment
+     */
+    async restoreDiagramAfterTabSwitch() {
+        if (!this.viewer || !this.containerRef.el || this.isDestroyed) {
+            throw new Error('Cannot restore: viewer or container not available');
+        }
+        
+        console.log('BPMNOwlComponent: Restoring diagram after tab switch...');
+        
+        try {
+            // Save current XML content
+            const currentXML = await this.viewer.saveXML({ format: true });
+            
+            // Re-attach viewer to container (this is the elegant approach)
+            this.viewer.attachTo(this.containerRef.el);
+            
+            // If attachment succeeded, we're done
+            console.log('BPMNOwlComponent: Diagram successfully restored via re-attachment');
+            
+            // Update state to reflect restoration
+            this.state.message = '';
+            this.state.error = false;
+            
+            // Ensure zoom and view are correct
+            this.safeSetTimeout(() => {
+                this.updateDiagramInfo();
+            }, 100);
+            
+        } catch (attachError) {
+            console.warn('BPMNOwlComponent: Re-attachment failed, trying full reload:', attachError);
+            
+            // Fallback: destroy and recreate with current content
+            const currentXML = this.state.currentXMLContent;
+            if (currentXML) {
+                // Clean up current viewer
+                this.viewer.destroy();
+                this.viewer = null;
+                
+                // Recreate viewer
+                this.viewer = new window.BpmnJS({
+                    container: this.containerRef.el,
+                    keyboard: { bindTo: window }
+                });
+                
+                // Setup events
+                this.setupEventBridge();
+                
+                // Import XML
+                await this.viewer.importXML(currentXML);
+                
+                console.log('BPMNOwlComponent: Diagram restored via recreation');
+            } else {
+                throw new Error('No XML content available for restoration');
+            }
+        }
+    }
+    
+    /**
+     * Handle OWL onPatched lifecycle - called after each re-render
+     * This is the OWL-native way to handle component updates
+     */
+    handleComponentPatched() {
+        if (this.isDestroyed) return;
+        
+        // Check if container reference is still valid after patch
+        if (!this.containerRef.el) {
+            console.warn('BPMNOwlComponent: Container lost after patch');
+            return;
+        }
+        
+        // Check if we need to restore diagram after a re-render
+        const hasViewer = !!this.viewer;
+        const shouldHaveDiagram = this.state.loaded && this.state.currentXMLContent;
+        const containerIsEmpty = !this.containerRef.el.querySelector('.bjs-container');
+        
+        if (hasViewer && shouldHaveDiagram && containerIsEmpty) {
+            console.log('BPMNOwlComponent: Container empty after patch - restoring diagram...');
+            
+            // Use timeout to avoid conflicts with OWL rendering
+            this.safeSetTimeout(() => {
+                this.restoreDiagramAfterTabSwitch().catch(error => {
+                    console.warn('BPMNOwlComponent: Restoration after patch failed:', error);
+                    // Fallback to auto-load
+                    this.autoLoadDiagramFromDatabase();
+                });
+            }, 50);
+        }
     }
 
     /**
@@ -1126,21 +1585,34 @@ export class BPMNOwlComponent extends Component {
                         this.clearDiagram();
                     }
                 }
-                // Check if field content changed for same record
+                // Check if field content changed for same record - BUT avoid clearing during tab switches
                 else if (currentFieldValue !== this.state.fieldValue) {
                     console.log('BPMNOwlComponent: Database field changed for record', currentRecordId);
+                    
+                    // Special handling: if we're switching tabs and have a viewer, don't clear
+                    if (!this.isVisible && this.viewer && this.state.loaded) {
+                        console.log('BPMNOwlComponent: Field change detected during tab switch - preserving viewer');
+                        this.state.fieldValue = currentFieldValue;
+                        this.updateSaveableContentState();
+                        this.state.lastSyncTime = new Date().toISOString();
+                        return; // Don't clear or reload
+                    }
+                    
                     this.state.fieldValue = currentFieldValue;
                     
                     // Check if there's saveable content
                     this.updateSaveableContentState();
                     this.state.lastSyncTime = new Date().toISOString();
                     
-                    if (currentFieldValue) {
-                        this.safeSetTimeout(() => {
-                            this.autoLoadDiagramFromDatabase();
-                        }, 300);
-                    } else {
-                        this.clearDiagram();
+                    // Only clear and reload if we don't have a loaded diagram or the content is significantly different
+                    if (!this.state.loaded || (currentFieldValue && this.state.currentXMLContent !== currentFieldValue)) {
+                        if (currentFieldValue) {
+                            this.safeSetTimeout(() => {
+                                this.autoLoadDiagramFromDatabase();
+                            }, 300);
+                        } else {
+                            this.clearDiagram();
+                        }
                     }
                 }
                 
@@ -1169,24 +1641,45 @@ export class BPMNOwlComponent extends Component {
     }
 
     /**
-     * Get current database field value
+     * Get current database field value - Database-first approach
      */
     getDatabaseFieldValue() {
-        console.log('BPMNOwlComponent: Searching for bpmn_xml field...');
+        console.log('BPMNOwlComponent: Using database-first approach...');
         
-        // Try multiple selectors to find the BPMN XML field
-        // First try direct field selectors
+        // PRIORITY 1: Use OWL props data (direct from database)
+        if (this.props && this.props.record) {
+            const record = this.props.record;
+            if (record.data && record.data.bpmn_xml !== undefined) {
+                const propValue = record.data.bpmn_xml || '';
+                console.log(`BPMNOwlComponent: Got value from database via props, length: ${propValue.length}`);
+                return propValue;
+            }
+        }
+        
+        // PRIORITY 2: Try to get from Odoo's field widget data
+        if (this.state.recordId) {
+            // Try to access the field widget directly
+            const fieldWidget = document.querySelector('[name="bpmn_xml"]');
+            if (fieldWidget && fieldWidget.closest('.o_field_widget')) {
+                const widget = fieldWidget.closest('.o_field_widget');
+                if (widget.__owl__ && widget.__owl__.component && widget.__owl__.component.props) {
+                    const widgetValue = widget.__owl__.component.props.record.data.bpmn_xml;
+                    if (widgetValue !== undefined) {
+                        console.log(`BPMNOwlComponent: Got value from field widget, length: ${widgetValue.length}`);
+                        return widgetValue || '';
+                    }
+                }
+            }
+        }
+        
+        // PRIORITY 3: DOM field search for immediate fallback
+        console.log('BPMNOwlComponent: Searching DOM for field value...');
         let xmlField = document.querySelector('textarea[name="bpmn_xml"]') ||
                       document.querySelector('textarea[id*="bpmn_xml"]') ||
                       document.querySelector('#bpmn_xml_editor_field') ||
                       document.querySelector('.o_field_text[data-field-name="bpmn_xml"]');
         
-        console.log('BPMNOwlComponent: Direct field search result:', xmlField ? 'Found' : 'Not found');
-        
-        // If not found, try to find within notebook tabs (which might be hidden)
         if (!xmlField) {
-            console.log('BPMNOwlComponent: Searching in all textareas...');
-            // Search in all tabs, even hidden ones
             const allTextareas = document.querySelectorAll('textarea');
             console.log(`BPMNOwlComponent: Found ${allTextareas.length} textarea elements`);
             
@@ -1201,20 +1694,20 @@ export class BPMNOwlComponent extends Component {
             }
         }
         
-        // If still not found, try using OWL's props if available
-        if (!xmlField && this.props && this.props.record) {
-            console.log('BPMNOwlComponent: Trying to get value from props.record...');
-            const record = this.props.record;
-            if (record.data && record.data.bpmn_xml !== undefined) {
-                const propValue = record.data.bpmn_xml || '';
-                console.log(`BPMNOwlComponent: Got value from props, length: ${propValue.length}`);
-                return propValue;
-            }
+        if (xmlField && xmlField.value && xmlField.value.trim()) {
+            const fieldValue = xmlField.value.trim();
+            console.log(`BPMNOwlComponent: Got DOM field value, length: ${fieldValue.length}`);
+            return fieldValue;
         }
         
-        const fieldValue = xmlField ? xmlField.value.trim() : '';
-        console.log(`BPMNOwlComponent: Final field value length: ${fieldValue.length}`);
-        return fieldValue;
+        // PRIORITY 4: Signal that we need to use API call
+        if (this.state.recordId) {
+            console.log('BPMNOwlComponent: No DOM data found, will attempt API call...');
+            return null; // Signal that we need to use API call
+        }
+        
+        console.log('BPMNOwlComponent: No data source available');
+        return '';
     }
 
     /**
@@ -1424,6 +1917,12 @@ export class BPMNOwlComponent extends Component {
     clearDiagram() {
         console.log('BPMNOwlComponent: Clearing diagram...');
         
+        // Don't clear if we're just switching tabs and have a preserved viewer
+        if (!this.isVisible && this.viewer && this.state.loaded) {
+            console.log('BPMNOwlComponent: Skipping clear during tab switch - viewer preserved');
+            return;
+        }
+        
         if (this.viewer) {
             try {
                 // Clean up existing viewer
@@ -1448,6 +1947,7 @@ export class BPMNOwlComponent extends Component {
         this.state.selectedElement = null;
         this.state.elementCount = 0;
         this.state.diagramTitle = '';
+        this.state.currentXMLContent = '';
     }
 
     /**
@@ -1463,6 +1963,12 @@ export class BPMNOwlComponent extends Component {
             return;
         }
         
+        // Check if already loading to prevent multiple simultaneous loads
+        if (this.state.isLoading) {
+            console.log('BPMNOwlComponent: Auto-load skipped - already loading');
+            return;
+        }
+        
         // Check database connection
         if (!this.state.dbConnected || !this.state.recordId) {
             console.log('BPMNOwlComponent: No database connection or record ID available');
@@ -1471,21 +1977,41 @@ export class BPMNOwlComponent extends Component {
         
         // Get XML data from database field
         const xmlContent = this.getDatabaseFieldValue();
+        
+        // Check if we already have this content loaded
+        if (xmlContent && this.state.loaded && this.state.currentXMLContent === xmlContent) {
+            console.log('BPMNOwlComponent: Diagram already loaded with current content, skipping auto-load');
+            return;
+        }
+        
         if (xmlContent) {
-            console.log('BPMNOwlComponent: XML data found in database, auto-loading diagram...');
+            console.log('BPMNOwlComponent: XML data found in database, checking if reload needed...');
             console.log('BPMNOwlComponent: Record ID:', this.state.recordId, 'Content length:', xmlContent.length);
             
-            // Update tracked content
-            this.state.currentXMLContent = xmlContent;
-            this.state.fieldValue = xmlContent;
-            
-            try {
-                await this.loadDiagramFromDatabase();
-                console.log('BPMNOwlComponent: Auto-load from database completed successfully');
-            } catch (error) {
-                console.warn('BPMNOwlComponent: Auto-load from database failed:', error);
-                // Don't show error message for auto-load failures to avoid overwhelming user
-                // They can still manually click "Load from Database" if needed
+            // Only reload if content has actually changed
+            if (this.state.currentXMLContent !== xmlContent) {
+                console.log('BPMNOwlComponent: Content changed, loading diagram...');
+                
+                // Set loading flag
+                this.state.isLoading = true;
+                
+                // Update tracked content
+                this.state.currentXMLContent = xmlContent;
+                this.state.fieldValue = xmlContent;
+                
+                try {
+                    await this.loadDiagramFromDatabase();
+                    console.log('BPMNOwlComponent: Auto-load from database completed successfully');
+                } catch (error) {
+                    console.warn('BPMNOwlComponent: Auto-load from database failed:', error);
+                    // Don't show error message for auto-load failures to avoid overwhelming user
+                    // They can still manually click "Load from Database" if needed
+                } finally {
+                    // Clear loading flag
+                    this.state.isLoading = false;
+                }
+            } else {
+                console.log('BPMNOwlComponent: Content unchanged, skipping reload');
             }
         } else {
             console.log('BPMNOwlComponent: No XML data found in database for auto-load');
@@ -1536,13 +2062,59 @@ export class BPMNOwlComponent extends Component {
                     throw new Error('No database connection available. Please refresh the page.');
                 }
                 
-                // Get XML content from database field
-                const xmlContent = this.getDatabaseFieldValue();
+                // Get XML content from database field using database-first approach
+                let xmlContent = this.getDatabaseFieldValue();
                 
-                // Validate database content
+                // If getDatabaseFieldValue returns null, we need to make a direct API call
+                if (xmlContent === null && this.state.recordId) {
+                    console.log('BPMNOwlComponent: Making direct API call to get BPMN data...');
+                    try {
+                        // Use fetch API which is more reliable than jQuery in this context
+                        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+                        
+                        const response = await fetch('/web/dataset/call_kw', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': csrfToken,
+                            },
+                            body: JSON.stringify({
+                                jsonrpc: '2.0',
+                                method: 'call',
+                                params: {
+                                    model: 'bpmn.process',
+                                    method: 'get_bpmn_xml_safe',
+                                    args: [[this.state.recordId]],
+                                    kwargs: {}
+                                },
+                                id: new Date().getTime()
+                            })
+                        });
+                        
+                        const result = await response.json();
+                        console.log('BPMNOwlComponent: API response:', result);
+                        
+                        if (result && result.result && result.result.success) {
+                            xmlContent = result.result.xml || '';
+                            console.log(`BPMNOwlComponent: API call successful, XML length: ${xmlContent.length}`);
+                        } else {
+                            const errorMsg = result?.result?.error || result?.error?.message || 'No data returned from API';
+                            console.warn('BPMNOwlComponent: API call unsuccessful:', errorMsg);
+                            xmlContent = ''; // Set to empty string to continue with fallback
+                        }
+                    } catch (apiError) {
+                        console.error('BPMNOwlComponent: API call failed:', apiError);
+                        // Fallback to empty content rather than failing completely
+                        console.log('BPMNOwlComponent: API call failed, will try DOM fallback');
+                        xmlContent = '';
+                    }
+                }
+                
+                // Validate database content - if empty, load default diagram
                 if (!xmlContent) {
                     const recordInfo = this.state.recordId ? ` for record ${this.state.recordId}` : '';
-                    throw new Error(`No BPMN XML data found in database${recordInfo}. Please add BPMN XML content first.`);
+                    console.log(`BPMNOwlComponent: No BPMN XML data found in database${recordInfo}, loading default diagram`);
+                    xmlContent = this.getDefaultBPMNXML();
                 }
 
                 const recordInfo = this.state.recordId ? ` Record ID: ${this.state.recordId},` : '';
@@ -1647,6 +2219,12 @@ export class BPMNOwlComponent extends Component {
                 this.state.message = "";
                 this.state.lastModified = new Date().toISOString();
                 this.state.lastSyncTime = new Date().toISOString();
+                
+                // Update tracked content
+                this.state.currentXMLContent = xmlContent;
+                
+                // Persist state for tab switching
+                this.persistComponentState();
                 
                 // Update enhanced state using safe animation frame
                 this.safeRequestAnimationFrame(() => {

@@ -17,7 +17,6 @@ class BPMNMountManager {
         this.observers = new Set(); // Track mutation observers
         this.timers = new Set(); // Track timers
         this.isDestroyed = false;
-        this.mountAttempts = new Set(); // Track mount attempts to prevent duplicates
         
         // Bind methods to preserve context
         this.cleanup = this.cleanup.bind(this);
@@ -50,26 +49,23 @@ class BPMNMountManager {
         }
         this.observers.clear();
         
-        // Clean up mounted component instances
+        // Clean up mounted instances
         for (const [mountPoint, instance] of this.mountedInstances) {
             try {
-                // Remove mount marker
-                if (mountPoint && mountPoint.hasAttribute) {
+                if (instance && typeof instance.destroy === 'function') {
+                    instance.destroy();
+                }
+                if (mountPoint) {
                     mountPoint.removeAttribute('data-bpmn-mounted');
+                    mountPoint.removeAttribute('data-persistent');
                 }
-                
-                // Clear mount point content
-                if (mountPoint && mountPoint.innerHTML) {
-                    mountPoint.innerHTML = '';
-                }
-                
             } catch (error) {
                 console.warn('BPMNMountManager: Error cleaning mounted instance:', error);
             }
         }
         this.mountedInstances.clear();
-        this.mountAttempts.clear();
         
+        console.log('BPMNMountManager: Cleanup completed');
     }
 
     /**
@@ -90,13 +86,17 @@ class BPMNMountManager {
     }
 
     /**
-     * Mount BPMN component with memory management
+     * Mount BPMN Component when available
      */
     mountBPMNComponent() {
-        if (this.isDestroyed) return;
+        if (this.isDestroyed) {
+            return;
+        }
         
-        // Only try to mount if we're on a page that might have BPMN content
-        const isBPMNPage = document.querySelector('textarea[id*="bpmn_xml"]') || 
+        console.log('BPMNMountManager: Attempting to mount BPMN component...');
+        
+        // Only mount on BPMN-related pages
+        const isBPMNPage = document.querySelector('[name="bpmn_xml"]') ||
                            document.getElementById('bpmn-owl-mount-point') ||
                            window.location.href.includes('bpmn.process');
         
@@ -110,12 +110,12 @@ class BPMNMountManager {
             if (this.isDestroyed) return;
             
             const mountPoint = document.getElementById('bpmn-owl-mount-point');
-            const mountKey = mountPoint ? mountPoint.toString() : 'no-mount-point';
             
             if (mountPoint && !mountPoint.hasAttribute('data-bpmn-mounted') && 
-                !this.mountAttempts.has(mountKey)) {
+                !mountPoint.hasAttribute('data-bpmn-mounting')) {
                 
-                this.mountAttempts.add(mountKey);
+                // Immediately mark as mounting to prevent duplicates
+                mountPoint.setAttribute('data-bpmn-mounting', 'true');
                 
                 try {
                     // Get the registered component
@@ -125,19 +125,50 @@ class BPMNMountManager {
                         throw new Error('BPMNOwlComponent not found in registry');
                     }
                     
-                    // Mount the component
+                    // Check if mount point is being reused (tab switch)
+                    const existingInstance = this.mountedInstances.get(mountPoint);
+                    if (existingInstance && !existingInstance.isDestroyed) {
+                        console.log('BPMNMountManager: Reusing existing component instance for tab switch');
+                        mountPoint.setAttribute('data-bpmn-mounted', 'true');
+                        return;
+                    }
+                    
+                    // Mount the component with persistence support
                     const instance = owlMount(BPMNComponent, mountPoint, {
                         env: {}, // Use default environment
+                        props: {
+                            persistAcrossTabSwitches: true, // Signal for persistence
+                            mountPoint: mountPoint // Reference to mount point
+                        }
                     });
                     
                     // Track the mounted instance
                     this.mountedInstances.set(mountPoint, instance);
                     mountPoint.setAttribute('data-bpmn-mounted', 'true');
+                    mountPoint.setAttribute('data-persistent', 'true'); // Mark as persistent
+                    mountPoint.removeAttribute('data-bpmn-mounting'); // Clear mounting flag
                     
+                    // Prevent mount point from being cleared during tab switches
+                    const originalInnerHTML = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+                    Object.defineProperty(mountPoint, 'innerHTML', {
+                        get: originalInnerHTML.get,
+                        set: function(value) {
+                            // Prevent clearing if it contains BPMN content and is persistent
+                            if (this.hasAttribute('data-persistent') && 
+                                this.querySelector('.bjs-container') && 
+                                value === '') {
+                                console.log('BPMNMountManager: Prevented mount point clearing during tab switch');
+                                return;
+                            }
+                            originalInnerHTML.set.call(this, value);
+                        }
+                    });
+                    
+                    console.log('BPMNMountManager: Component mounted successfully with persistence support');
                     
                 } catch (error) {
                     console.error('BPMNMountManager: Mount failed:', error);
-                    this.mountAttempts.delete(mountKey);
+                    mountPoint.removeAttribute('data-bpmn-mounting'); // Clear mounting flag on error
                     
                     // Show error in mount point
                     if (mountPoint && !this.isDestroyed) {
@@ -150,96 +181,155 @@ class BPMNMountManager {
                         `;
                     }
                 }
-                
-            } else if (mountPoint && mountPoint.hasAttribute('data-bpmn-mounted')) {
-            } else if (attempts < 10 && !this.isDestroyed) {
-                this.safeSetTimeout(() => checkForMountPoint(attempts + 1), 500);
-            } else if (!this.isDestroyed) {
+            } else if (!mountPoint && attempts < 10) {
+                // Retry mounting with exponential backoff
+                const delay = Math.min(1000 * Math.pow(2, attempts), 5000);
+                console.log(`BPMNMountManager: Mount point not found, retrying in ${delay}ms (attempt ${attempts + 1}/10)`);
+                this.safeSetTimeout(() => checkForMountPoint(attempts + 1), delay);
             }
         };
         
-        // Start checking
+        // Start checking for mount point
         checkForMountPoint();
     }
 
     /**
-     * Monitor for page changes in Odoo's SPA with memory management
+     * Observe page changes for SPA navigation
      */
     observePageChanges() {
-        if (this.isDestroyed) return;
-        
-        // Ensure document.body exists before starting observer
-        if (!document.body) {
-            this.safeSetTimeout(() => this.observePageChanges(), 100);
+        if (this.isDestroyed) {
             return;
         }
         
-        // Use MutationObserver to detect when new content is loaded
+        console.log('BPMNMountManager: Setting up page change observers...');
+        
+        // Method 1: URL change detection for SPA navigation
+        let currentUrl = window.location.href;
+        const checkUrlChange = () => {
+            if (this.isDestroyed) return;
+            
+            if (window.location.href !== currentUrl) {
+                currentUrl = window.location.href;
+                console.log('BPMNMountManager: URL changed, attempting mount:', currentUrl);
+                this.safeSetTimeout(() => this.mountBPMNComponent(), 500);
+            }
+            
+            this.safeSetTimeout(checkUrlChange, 1000);
+        };
+        this.safeSetTimeout(checkUrlChange, 1000);
+        
+        // Method 2: DOM mutation observer for dynamic content
         const observer = new MutationObserver((mutations) => {
             if (this.isDestroyed) return;
             
-            let shouldCheckMount = false;
-            
-            mutations.forEach((mutation) => {
-                if (this.isDestroyed) return;
-                
-                // Check if new nodes were added that might contain BPMN forms
-                if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-                    for (let node of mutation.addedNodes) {
+            for (const mutation of mutations) {
+                if (mutation.type === 'childList') {
+                    // Check for new nodes
+                    for (const node of mutation.addedNodes) {
                         if (node.nodeType === Node.ELEMENT_NODE) {
-                            // Check if this might be a BPMN form
-                            if (node.querySelector && 
-                                (node.querySelector('textarea[id*="bpmn_xml"]') || 
-                                 node.querySelector('#bpmn-owl-mount-point') ||
-                                 node.id === 'bpmn-owl-mount-point')) {
-                                shouldCheckMount = true;
+                            // Check if the mount point was added
+                            if (node.id === 'bpmn-owl-mount-point' || 
+                                node.querySelector('#bpmn-owl-mount-point')) {
+                                console.log('BPMNMountManager: Mount point detected in DOM, attempting mount...');
+                                this.safeSetTimeout(() => this.mountBPMNComponent(), 100);
                                 break;
                             }
                         }
                     }
                 }
-            });
-            
-            if (shouldCheckMount && !this.isDestroyed) {
-                // Small delay to ensure DOM is stable
-                this.safeSetTimeout(this.mountBPMNComponent, 200);
             }
         });
         
-        // Track observer for cleanup
-        this.observers.add(observer);
+        // Only observe if document.body exists
+        if (document.body) {
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+            this.observers.add(observer);
+        } else {
+            // Wait for document.body to be available
+            const waitForBody = () => {
+                if (document.body && !this.isDestroyed) {
+                    observer.observe(document.body, {
+                        childList: true,
+                        subtree: true
+                    });
+                    this.observers.add(observer);
+                } else if (!this.isDestroyed) {
+                    this.safeSetTimeout(waitForBody, 50);
+                }
+            };
+            this.safeSetTimeout(waitForBody, 50);
+        }
         
-        // Start observing
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
+        // Method 3: Page load and navigation events
+        const handleNavigation = () => {
+            if (this.isDestroyed) return;
+            console.log('BPMNMountManager: Navigation event detected, attempting mount...');
+            this.safeSetTimeout(() => this.mountBPMNComponent(), 300);
+        };
         
+        window.addEventListener('popstate', handleNavigation);
+        window.addEventListener('hashchange', handleNavigation);
+        
+        // Method 4: Document ready state changes
+        if (document.readyState !== 'complete') {
+            const handleReadyStateChange = () => {
+                if (this.isDestroyed) return;
+                if (document.readyState === 'complete') {
+                    console.log('BPMNMountManager: Document ready, attempting mount...');
+                    this.safeSetTimeout(() => this.mountBPMNComponent(), 100);
+                    document.removeEventListener('readystatechange', handleReadyStateChange);
+                }
+            };
+            document.addEventListener('readystatechange', handleReadyStateChange);
+        }
+        
+        console.log('BPMNMountManager: Page change observers configured');
     }
 
     /**
-     * Initialize everything when DOM is ready
+     * Initialize the mount manager
      */
-    initialize() {
-        if (this.isDestroyed) return;
+    init() {
+        if (this.isDestroyed) {
+            return;
+        }
         
+        console.log('BPMNMountManager: Initializing...');
         
-        // Initial mount attempt
-        this.safeSetTimeout(this.mountBPMNComponent, 1000);
-        
-        // Start observing for SPA navigation
+        // Start observing page changes
         this.observePageChanges();
         
+        // Attempt immediate mount if DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                this.safeSetTimeout(() => this.mountBPMNComponent(), 100);
+            });
+        } else {
+            this.safeSetTimeout(() => this.mountBPMNComponent(), 100);
+        }
+        
+        console.log('BPMNMountManager: Initialization complete');
     }
 }
 
-// Create global instance with memory management
-const mountManager = new BPMNMountManager();
-
-// Wait for DOM to be ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => mountManager.initialize());
+// Create global instance and initialize safely (singleton pattern)
+if (!window.bpmnMountManager) {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!window.bpmnMountManager) { // Double-check after DOM load
+                window.bpmnMountManager = new BPMNMountManager();
+                window.bpmnMountManager.init();
+            }
+        });
+    } else {
+        window.bpmnMountManager = new BPMNMountManager();
+        window.bpmnMountManager.init();
+    }
+    
+    console.log('BPMNMountManager: Script loaded and manager will initialize when DOM is ready');
 } else {
-    // DOM is already ready
-    mountManager.initialize();
+    console.log('BPMNMountManager: Manager already exists, skipping initialization');
 }
