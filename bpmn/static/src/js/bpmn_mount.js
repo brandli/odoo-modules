@@ -106,13 +106,40 @@ class BPMNMountManager {
         
         
         // Wait for the mount point to be available
-        const checkForMountPoint = (attempts = 0) => {
+        const checkForMountPoint = async (attempts = 0) => {
             if (this.isDestroyed) return;
             
             const mountPoint = document.getElementById('bpmn-owl-mount-point');
             
-            if (mountPoint && !mountPoint.hasAttribute('data-bpmn-mounted') && 
-                !mountPoint.hasAttribute('data-bpmn-mounting')) {
+            // Helper functions for record and XML access
+            const getRecordId = () => {
+                const urlMatch = window.location.href.match(/\/(\d+)$/);
+                if (urlMatch) return parseInt(urlMatch[1]);
+                
+                const formElement = document.querySelector('form.o_form_view');
+                if (formElement && formElement.dataset.recordId) {
+                    return parseInt(formElement.dataset.recordId);
+                }
+                
+                return null;
+            };
+            
+            const getXMLContent = () => {
+                const xmlField = document.querySelector('textarea[name="bpmn_xml"]');
+                return xmlField ? xmlField.value : null;
+            };
+            
+            if (mountPoint && !mountPoint.hasAttribute('data-bpmn-mounting')) {
+                
+                // Check if this is a record change scenario
+                const existingInstance = this.mountedInstances.get(mountPoint);
+                const currentRecordId = getRecordId();
+                const needsRemount = existingInstance && existingInstance.lastRecordId !== currentRecordId;
+                
+                if (mountPoint.hasAttribute('data-bpmn-mounted') && !needsRemount) {
+                    console.log('BPMNMountManager: Mount point already mounted and record unchanged, skipping');
+                    return;
+                }
                 
                 // Immediately mark as mounting to prevent duplicates
                 mountPoint.setAttribute('data-bpmn-mounting', 'true');
@@ -127,42 +154,138 @@ class BPMNMountManager {
                     
                     // Check if mount point is being reused (tab switch)
                     const existingInstance = this.mountedInstances.get(mountPoint);
-                    if (existingInstance && !existingInstance.isDestroyed) {
-                        console.log('BPMNMountManager: Reusing existing component instance for tab switch');
-                        mountPoint.setAttribute('data-bpmn-mounted', 'true');
-                        return;
-                    }
+                    const currentRecordId = getRecordId();
                     
-                    // Mount the component with persistence support
+                    console.log(`BPMNMountManager: Current record ID: ${currentRecordId}`);
+                    console.log(`BPMNMountManager: Existing instance:`, existingInstance);
+                    console.log(`BPMNMountManager: Existing instance record ID:`, existingInstance?.lastRecordId);
+                    
+                    if (existingInstance && !existingInstance.isDestroyed) {
+                        // Check if the record ID has changed
+                        if (existingInstance.lastRecordId !== currentRecordId) {
+                            console.log(`BPMNMountManager: Record changed from ${existingInstance.lastRecordId} to ${currentRecordId}, destroying and recreating component`);
+                            try {
+                                // If existingInstance is a Promise, wait for it to resolve
+                                if (existingInstance instanceof Promise) {
+                                    const instance = await existingInstance;
+                                    if (instance && typeof instance.destroy === 'function') {
+                                        instance.destroy();
+                                    }
+                                } else if (typeof existingInstance.destroy === 'function') {
+                                    existingInstance.destroy();
+                                }
+                            } catch (e) {
+                                console.log('Error destroying existing instance:', e);
+                            }
+                            this.mountedInstances.delete(mountPoint);
+                            mountPoint.removeAttribute('data-bpmn-mounted');
+                            mountPoint.removeAttribute('data-persistent');
+                            // Clear the mount point content to prevent innerHTML conflicts
+                            mountPoint.innerHTML = '';
+                            // Continue to create new instance below
+                        } else {
+                            console.log('BPMNMountManager: Reusing existing component instance for same record');
+                            mountPoint.setAttribute('data-bpmn-mounted', 'true');
+                            mountPoint.removeAttribute('data-bpmn-mounting');
+                            return;
+                        }
+                    } else if (existingInstance) {
+                        console.log('BPMNMountManager: Existing instance is destroyed, cleaning up');
+                        this.mountedInstances.delete(mountPoint);
+                        mountPoint.removeAttribute('data-bpmn-mounted');
+                        mountPoint.removeAttribute('data-persistent');
+                        // Clear the mount point content to prevent innerHTML conflicts
+                        mountPoint.innerHTML = '';
+                    }
+
+                    // Create a reactive record object that updates when the page changes
+                    const createRecordProxy = () => {
+                        let currentRecordId = getRecordId();
+                        
+                        return new Proxy({}, {
+                            get(target, prop) {
+                                if (prop === 'data') {
+                                    const currentId = getRecordId();
+                                    return {
+                                        id: currentId,
+                                        bpmn_xml: getXMLContent()
+                                    };
+                                } else if (prop === 'update') {
+                                    return (values) => {
+                                        // Update the form field when component saves
+                                        if (values.bpmn_xml) {
+                                            const xmlField = document.querySelector('textarea[name="bpmn_xml"]');
+                                            if (xmlField) {
+                                                xmlField.value = values.bpmn_xml;
+                                                // Trigger change event to notify Odoo
+                                                xmlField.dispatchEvent(new Event('change', { bubbles: true }));
+                                            }
+                                        }
+                                    };
+                                }
+                                return target[prop];
+                            }
+                        });
+                    };
+
+                    // Mount the component with reactive record data and RPC service
                     const instance = owlMount(BPMNComponent, mountPoint, {
-                        env: {}, // Use default environment
+                        env: {
+                            services: {
+                                rpc: async (endpoint, params) => {
+                                    console.log('RPC call:', endpoint, params);
+                                    
+                                    // Make actual RPC call to Odoo backend
+                                    try {
+                                        const response = await fetch(endpoint, {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type': 'application/json',
+                                                'X-Requested-With': 'XMLHttpRequest'
+                                            },
+                                            credentials: 'same-origin',
+                                            body: JSON.stringify({
+                                                jsonrpc: '2.0',
+                                                method: 'call',
+                                                params: params,
+                                                id: Date.now()
+                                            })
+                                        });
+                                        
+                                        const data = await response.json();
+                                        console.log('RPC response:', data);
+                                        
+                                        if (data.error) {
+                                            throw new Error(data.error.message || 'RPC Error');
+                                        }
+                                        
+                                        return data.result;
+                                        
+                                    } catch (error) {
+                                        console.error('RPC Error:', error);
+                                        return { success: false, error: error.message };
+                                    }
+                                }
+                            }
+                        },
                         props: {
-                            persistAcrossTabSwitches: true, // Signal for persistence
-                            mountPoint: mountPoint // Reference to mount point
+                            record: createRecordProxy(),
+                            persistAcrossTabSwitches: true,
+                            mountPoint: mountPoint
                         }
                     });
                     
-                    // Track the mounted instance
-                    this.mountedInstances.set(mountPoint, instance);
+                    // Wait for the instance to be fully created and then store it
+                    const componentInstance = await instance;
+                    
+                    // Track the current record ID on the instance for change detection
+                    componentInstance.lastRecordId = currentRecordId;
+                    
+                    // Track the mounted instance (store the actual component, not the Promise)
+                    this.mountedInstances.set(mountPoint, componentInstance);
                     mountPoint.setAttribute('data-bpmn-mounted', 'true');
                     mountPoint.setAttribute('data-persistent', 'true'); // Mark as persistent
                     mountPoint.removeAttribute('data-bpmn-mounting'); // Clear mounting flag
-                    
-                    // Prevent mount point from being cleared during tab switches
-                    const originalInnerHTML = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
-                    Object.defineProperty(mountPoint, 'innerHTML', {
-                        get: originalInnerHTML.get,
-                        set: function(value) {
-                            // Prevent clearing if it contains BPMN content and is persistent
-                            if (this.hasAttribute('data-persistent') && 
-                                this.querySelector('.bjs-container') && 
-                                value === '') {
-                                console.log('BPMNMountManager: Prevented mount point clearing during tab switch');
-                                return;
-                            }
-                            originalInnerHTML.set.call(this, value);
-                        }
-                    });
                     
                     console.log('BPMNMountManager: Component mounted successfully with persistence support');
                     

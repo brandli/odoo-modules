@@ -234,22 +234,11 @@ export class BPMNOwlComponent extends Component {
                                     <div t-else="">
                                         <i class="fa fa-sitemap fa-2x mb-3"/>
                                         <div>No diagram loaded</div>
-                                        <div class="small mt-2" t-if="!state.error">
+                                        <div class="small mt-2">
                                             <button type="button" 
                                                     class="btn btn-outline-primary btn-sm mt-2" 
                                                     t-on-click="createDefaultDiagram">
                                                 <i class="fa fa-plus me-1"/>Create Default Diagram
-                                            </button>
-                                        </div>
-                                        <div class="small mt-2 text-danger" t-if="state.error">
-                                            <div class="mb-2">
-                                                <i class="fa fa-exclamation-triangle me-1"/>
-                                                Editor initialization failed
-                                            </div>
-                                            <button type="button" 
-                                                    class="btn btn-outline-secondary btn-sm" 
-                                                    t-on-click="retryInitialization">
-                                                <i class="fa fa-refresh me-1"/>Retry Initialization
                                             </button>
                                         </div>
                                     </div>
@@ -284,9 +273,6 @@ export class BPMNOwlComponent extends Component {
         // Command stack for undo/redo
         this.commandStack = null;
         
-        // Track loaded record to detect changes
-        this.lastRecordId = null;
-        
         // Auto-save settings
         this.autoSaveInterval = null;
         this.autoSaveDelay = 30000; // 30 seconds
@@ -299,27 +285,10 @@ export class BPMNOwlComponent extends Component {
 
     async onMounted() {
         console.log('BPMNOwlComponent: Component mounted');
-        console.log('BPMNOwlComponent: Checking BPMN.js availability:', typeof window.BpmnJS);
-        console.log('BPMNOwlComponent: Container ref:', this.containerRef.el);
-        
-        try {
-            await this.initializeBPMNModeler();
-            
-            // Check if record data is available, if not wait a bit
-            if (!this.props.record?.data?.id) {
-                console.log('Record data not yet available, waiting...');
-                setTimeout(() => this.loadDiagramFromDatabase(), 1000);
-            } else {
-                await this.loadDiagramFromDatabase();
-            }
-            
-            this.setupKeyboardShortcuts();
-            this.startAutoSave();
-        } catch (error) {
-            console.error('Error during component initialization:', error);
-            this.state.error = true;
-            this.state.message = `Initialization failed: ${error.message}`;
-        }
+        await this.initializeBPMNModeler();
+        await this.loadDiagramFromDatabase();
+        this.setupKeyboardShortcuts();
+        this.startAutoSave();
     }
 
     onWillDestroy() {
@@ -331,61 +300,6 @@ export class BPMNOwlComponent extends Component {
         // Re-attach BPMN modeler if container was recreated
         if (this.modeler && this.containerRef.el && !this.containerRef.el.querySelector('.djs-container')) {
             this.attachModelerToContainer();
-        }
-        
-        // Check if we need to reload data when record changes
-        const currentRecordId = this.props.record?.data?.id;
-        if (currentRecordId && currentRecordId !== this.lastRecordId) {
-            console.log(`Record ID changed from ${this.lastRecordId} to ${currentRecordId}, reloading diagram data`);
-            this.lastRecordId = currentRecordId;
-            
-            // Force reload the diagram for the new record
-            this.loadDiagramFromDatabase().then(() => {
-                console.log('Diagram successfully reloaded for new record:', currentRecordId);
-            }).catch(error => {
-                console.error('Error reloading diagram for new record:', error);
-            });
-        }
-    }
-
-    attachModelerToContainer() {
-        try {
-            if (this.modeler && this.containerRef.el) {
-                this.modeler.attachTo(this.containerRef.el);
-                console.log('BPMN Modeler re-attached to container');
-            }
-        } catch (error) {
-            console.error('Error re-attaching modeler to container:', error);
-        }
-    }
-
-    async retryInitialization() {
-        console.log('BPMNOwlComponent: Retrying initialization...');
-        this.state.error = false;
-        this.state.loading = true;
-        this.state.message = 'Retrying initialization...';
-        
-        try {
-            // Clean up any existing modeler
-            if (this.modeler) {
-                this.modeler.destroy();
-                this.modeler = null;
-                this.commandStack = null;
-            }
-            
-            // Retry initialization
-            await this.initializeBPMNModeler();
-            await this.loadDiagramFromDatabase();
-            this.setupKeyboardShortcuts();
-            this.startAutoSave();
-            
-            this.state.message = 'Initialization successful';
-        } catch (error) {
-            console.error('Retry initialization failed:', error);
-            this.state.error = true;
-            this.state.message = `Retry failed: ${error.message}`;
-        } finally {
-            this.state.loading = false;
         }
     }
 
@@ -413,26 +327,13 @@ export class BPMNOwlComponent extends Component {
 
     async initializeBPMNModeler() {
         try {
-            // Check if BPMN modeler is available with retry logic
-            let retries = 0;
-            const maxRetries = 10;
-            while (typeof window.BpmnJS === 'undefined' && retries < maxRetries) {
-                console.log(`Waiting for BPMN.js library... (attempt ${retries + 1}/${maxRetries})`);
-                await new Promise(resolve => setTimeout(resolve, 500));
-                retries++;
-            }
-            
-            if (typeof window.BpmnJS === 'undefined') {
-                throw new Error('BPMN.js library not loaded after waiting');
-            }
-
-            // Ensure container is available
-            if (!this.containerRef.el) {
-                throw new Error('BPMN container element not available');
+            // Check if BPMN modeler is available
+            if (typeof window.BpmnModeler === 'undefined') {
+                throw new Error('BPMN Modeler library not loaded');
             }
 
             // Create BPMN modeler instance
-            this.modeler = new window.BpmnJS({
+            this.modeler = new window.BpmnModeler({
                 container: this.containerRef.el,
                 keyboard: {
                     bindTo: window
@@ -451,7 +352,6 @@ export class BPMNOwlComponent extends Component {
             console.error('Failed to initialize BPMN modeler:', error);
             this.state.error = true;
             this.state.message = `Failed to initialize BPMN editor: ${error.message}`;
-            throw error; // Re-throw to handle in calling method
         }
     }
 
@@ -654,15 +554,9 @@ export class BPMNOwlComponent extends Component {
         try {
             const xml = await this.modeler.saveXML({ format: true });
             
-            // Call auto-save API endpoint  
-            const recordId = this.props.record?.data?.id;
-            if (!recordId) {
-                console.warn('No record ID available for auto-save');
-                return;
-            }
-            
+            // Call auto-save API endpoint
             const response = await this.env.services.rpc('/bpmn/auto_save', {
-                process_id: recordId,
+                process_id: this.props.record.data.id,
                 xml_content: xml.xml
             });
 
@@ -707,52 +601,26 @@ export class BPMNOwlComponent extends Component {
         this.state.message = '';
 
         try {
-            console.log('=== BPMN Data Loading Debug ===');
-            console.log('this.props:', this.props);
-            console.log('this.props.record:', this.props.record);
-            console.log('Available record data:', this.props.record?.data);
-            console.log('Record ID:', this.props.record?.data?.id);
-            
-            const recordId = this.props.record?.data?.id;
-            if (!recordId) {
-                console.error('No record ID available for loading diagram');
-                await this.createDefaultDiagram();
-                return;
-            }
-
-            console.log('Loading XML from database via RPC for record ID:', recordId);
-            
-            // Load data directly from database using RPC
             const result = await this.env.services.rpc('/bpmn/get_process_data', {
-                process_id: recordId
+                process_id: this.props.record.data.id
             });
 
-            console.log('Database load result:', result);
-
-            if (result.success && result.xml && result.xml.trim()) {
-                console.log('Loading XML from database');
-                console.log('XML preview:', result.xml.substring(0, 200) + '...');
+            if (result.success && result.xml) {
                 await this.modeler.importXML(result.xml);
                 this.state.loaded = true;
                 this.state.hasSaveableContent = false;
                 this.state.modificationCount = 0;
                 this.updateUndoRedoState();
+                this.state.message = 'Diagram loaded successfully';
             } else {
-                console.log('No XML content in database, creating default diagram');
-                await this.createDefaultDiagram();
+                throw new Error(result.error || 'Failed to load diagram');
             }
 
         } catch (error) {
-            console.error('Error loading diagram from database:', error);
+            console.error('Error loading diagram:', error);
             this.state.error = true;
             this.state.message = `Failed to load diagram: ${error.message}`;
-            
-            // Only try to create default diagram if modeler is available
-            if (this.modeler) {
-                await this.createDefaultDiagram();
-            } else {
-                console.warn('Cannot create default diagram: modeler not initialized');
-            }
+            await this.createDefaultDiagram();
         } finally {
             this.state.loading = false;
         }
@@ -765,29 +633,11 @@ export class BPMNOwlComponent extends Component {
         try {
             const result = await this.modeler.saveXML({ format: true });
             
-            console.log('Saving XML to database:', result.xml.substring(0, 200) + '...');
-            
-            // Save directly to database via RPC
-            const recordId = this.props.record?.data?.id;
-            if (recordId) {
-                const saveResult = await this.env.services.rpc('/web/dataset/call_kw', {
-                    model: 'bpmn.process',
-                    method: 'write',
-                    args: [recordId, { bpmn_xml: result.xml }],
-                    kwargs: {}
-                });
-                
-                console.log('Database save result:', saveResult);
-            }
-            
-            // Also update the form field for immediate UI sync
-            if (this.props.record?.update) {
-                await this.props.record.update({ bpmn_xml: result.xml });
-                console.log('Form field updated successfully');
-            }
+            // Update the XML field in the form
+            await this.props.record.update({ bpmn_xml: result.xml });
             
             this.state.hasSaveableContent = false;
-            this.state.message = 'Diagram saved successfully to database';
+            this.state.message = 'Diagram saved successfully';
             this.state.error = false;
 
         } catch (error) {
@@ -801,21 +651,11 @@ export class BPMNOwlComponent extends Component {
 
     async createDefaultDiagram() {
         try {
-            // Ensure modeler is initialized before creating default diagram
-            if (!this.modeler) {
-                await this.initializeBPMNModeler();
-            }
-            
-            // Double-check modeler is available
-            if (!this.modeler) {
-                throw new Error('BPMN modeler could not be initialized');
-            }
-            
             const defaultXML = this.getDefaultBPMNXML();
             await this.modeler.importXML(defaultXML);
             this.state.loaded = true;
             this.state.hasSaveableContent = true;
-            this.state.message = 'Created new diagram - save to persist';
+            this.state.message = 'Default diagram created';
             this.state.error = false;
         } catch (error) {
             console.error('Error creating default diagram:', error);
@@ -871,5 +711,5 @@ export class BPMNOwlComponent extends Component {
     }
 }
 
-// Register the component in the components registry for OWL mounting
-webRegistry.category("components").add("BPMNOwlComponent", BPMNOwlComponent);
+// Register the component
+webRegistry.category("misc").add("bpmn_owl_component", BPMNOwlComponent);
