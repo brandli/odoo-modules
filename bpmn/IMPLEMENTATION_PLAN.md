@@ -37,20 +37,33 @@ The module currently provides:
 #### 1.2 Update Backend Model for Editing
 **Priority: High**
 **Estimated Time: 1-2 days**
+**Status: ✅ COMPLETED**
 
-- [ ] Add versioning fields to `bpmn.process` model:
+- [x] Add versioning fields to `bpmn.process` model:
   - `version` (Integer, default=1)
+  - `version_history_ids` (One2many to version history)
   - `last_modified_by` (Many2one to res.users)
-  - `modification_history` (One2many to new model)
-- [ ] Create `bpmn.process.version` model for version tracking
-- [ ] Add server-side validation for edited XML
-- [ ] Add methods for handling auto-save operations
-- [ ] Add conflict detection for concurrent edits
+  - `auto_save_enabled` (Boolean, default=True)
+  - `last_auto_save` (Datetime)
+- [x] Create `bpmn.process.version` model for version tracking
+- [x] Add server-side validation for edited XML
+- [x] Add methods for handling auto-save operations
+- [x] Add conflict detection for concurrent edits
+- [x] Implement HTTP controller endpoints for auto-save
+- [x] Add manual version snapshot functionality
+- [x] Enhanced error handling and validation
 
-**Files to modify:**
-- `models/bpmn_process.py`
-- Create new file: `models/bpmn_process_version.py`
-- `security/ir.model.access.csv`
+**Files modified:**
+- `models/bpmn_process.py` - Enhanced with versioning capabilities
+- `models/bpmn_process_version.py` - New version history model
+- `models/__init__.py` - Updated imports
+- `controllers/bpmn_controller.py` - New HTTP endpoints
+- `controllers/__init__.py` - New controller module
+- `views/bpmn_process_views.xml` - Enhanced with version UI and manual snapshot button
+- `views/bpmn_process_version_views.xml` - New version history views
+- `security/ir.model.access.csv` - Updated permissions
+- `security/bpmn_security.xml` - Version model access rights
+- `__init__.py` - Updated to include controllers
 
 ### Phase 2: Basic Editing Interface
 

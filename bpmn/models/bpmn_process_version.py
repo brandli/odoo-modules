@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from odoo import models, fields, api
+from odoo import models, fields, api, _
+from odoo.exceptions import UserError
 
 
 class BPMNProcessVersion(models.Model):
@@ -35,11 +36,12 @@ class BPMNProcessVersion(models.Model):
     )
     
     change_type = fields.Selection([
-        ('create', 'Created'),
-        ('update', 'Updated'),
-        ('restore', 'Restored'),
-        ('auto_save', 'Auto-saved')
-    ], string='Change Type', required=True, default='update')
+        ('auto', 'Auto-save'),
+        ('milestone', 'Milestone'),
+        ('restore', 'Version Restore'),
+        ('import', 'Import'),
+        ('initial', 'Initial Creation')
+    ], string='Change Type', required=True, default='auto')
     
     created_by = fields.Many2one(
         'res.users',
@@ -92,7 +94,10 @@ class BPMNProcessVersion(models.Model):
         self.ensure_one()
         
         if not self.bpmn_xml_snapshot:
-            raise ValueError("Cannot restore: no XML snapshot available")
+            raise UserError(_("Cannot restore: no XML snapshot available"))
+        
+        if not self.process_id:
+            raise UserError(_("Cannot restore: no process reference found"))
         
         # Update the main process with this version's content
         self.process_id.write({
@@ -111,8 +116,8 @@ class BPMNProcessVersion(models.Model):
             'type': 'ir.actions.client',
             'tag': 'display_notification',
             'params': {
-                'title': 'Version Restored',
-                'message': f'Process restored to version {self.version_number}',
+                'title': _('Version Restored'),
+                'message': _('Process restored to version %s') % self.version_number,
                 'type': 'success'
             }
         }
@@ -121,24 +126,29 @@ class BPMNProcessVersion(models.Model):
         """Compare this version with the current version"""
         self.ensure_one()
         
+        if not self.process_id:
+            raise UserError(_("Cannot compare: no process reference found"))
+        
         current_xml = self.process_id.bpmn_xml or ''
         version_xml = self.bpmn_xml_snapshot or ''
         
         # Simple comparison - in a real implementation, you might want a more sophisticated diff
         if current_xml == version_xml:
-            message = "This version is identical to the current version"
+            message = _("This version is identical to the current version")
+            notification_type = 'info'
         else:
             current_size = len(current_xml)
             version_size = len(version_xml)
             size_diff = abs(current_size - version_size)
-            message = f"Differences found: {size_diff} character(s) difference in size"
+            message = _("Differences found: %s character(s) difference in size") % size_diff
+            notification_type = 'warning'
         
         return {
             'type': 'ir.actions.client',
             'tag': 'display_notification',
             'params': {
-                'title': 'Version Comparison',
+                'title': _('Version Comparison'),
                 'message': message,
-                'type': 'info'
+                'type': notification_type
             }
         }

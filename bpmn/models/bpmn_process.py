@@ -82,7 +82,7 @@ class BPMNProcess(models.Model):
         record = super().create(vals)
         
         # Create initial version history entry
-        record._create_version_entry('Initial version', 'create')
+        record._create_version_entry('Initial version', 'initial')
         
         return record
     
@@ -99,7 +99,8 @@ class BPMNProcess(models.Model):
                     vals['last_modified_by'] = self.env.user.id
                     
                     # Create version history entry before updating
-                    record._create_version_entry('Updated BPMN XML', 'update')
+                    record._create_version_entry('Updated BPMN XML', 'auto')
+                    break  # Only create one version entry for batch updates
         
         return super().write(vals)
     
@@ -122,6 +123,15 @@ class BPMNProcess(models.Model):
                         'error': 'Process was modified by another user. Please refresh and try again.',
                         'conflict': True
                     }
+            
+            # Only save if content has actually changed
+            if self.bpmn_xml == xml_content:
+                return {
+                    'success': True,
+                    'version': self.version,
+                    'last_modified': self.write_date.isoformat() if self.write_date else None,
+                    'message': 'No changes detected - auto-save skipped'
+                }
             
             # Perform auto-save
             self.write({
@@ -274,21 +284,22 @@ class BPMNProcess(models.Model):
 </bpmn:definitions>'''
     
     def action_manual_version(self):
-        """Manually create a version snapshot"""
+        """Create a manual milestone version"""
         self.ensure_one()
         
         if not self.bpmn_xml:
-            raise UserError(_("Cannot create version: No BPMN content available"))
+            raise UserError(_("Cannot create milestone: No BPMN content available"))
         
-        description = f"Manual snapshot created on {fields.Datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        self._create_version_entry(description, 'manual')
+        # Create milestone description with timestamp
+        description = f"Milestone created on {fields.Datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        self._create_version_entry(description, 'milestone')
         
         return {
             'type': 'ir.actions.client',
             'tag': 'display_notification',
             'params': {
-                'title': _('Version Created'),
-                'message': _('Manual version snapshot created successfully'),
+                'title': _('Milestone Created'),
+                'message': _('Milestone version created successfully for version %s') % self.version,
                 'type': 'success',
                 'sticky': False,
             }

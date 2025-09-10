@@ -1,2 +1,3 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_bpmn_process_all,bpmn.process,model_bpmn_process,base.group_user,1,1,1,1
+access_bpmn_process_version_user,bpmn.process.version,model_bpmn_process_version,base.group_user,1,1,1,0

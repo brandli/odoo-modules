@@ -9,7 +9,10 @@
                 <field name="process_id"/>
                 <field name="version_number"/>
                 <field name="description"/>
-                <field name="change_type"/>
+                <field name="change_type"
+                       decoration-info="change_type == 'milestone'"
+                       decoration-success="change_type == 'initial'"
+                       decoration-muted="change_type == 'auto'"/>
                 <field name="created_by"/>
                 <field name="created_date"/>
                 <field name="file_size"/>

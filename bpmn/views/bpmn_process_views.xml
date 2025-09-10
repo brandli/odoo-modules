@@ -8,6 +8,8 @@
             <list>
                 <field name="name"/>
                 <field name="description"/>
+                <field name="version"/>
+                <field name="last_modified_by"/>
                 <field name="active"/>
             </list>
         </field>
@@ -18,7 +20,7 @@
         <field name="name">bpmn.process.form</field>
         <field name="model">bpmn.process</field>
         <field name="arch" type="xml">
-                        <form string="BPMN Process">
+            <form string="BPMN Process">
                 <sheet>
                     <div class="oe_title">
                         <h1>
@@ -68,7 +70,9 @@
                                 <list string="Version History" default_order="created_date desc">
                                     <field name="version_number"/>
                                     <field name="description"/>
-                                    <field name="change_type"/>
+                                    <field name="change_type" 
+                                           decoration-info="change_type == 'milestone'"
+                                           decoration-muted="change_type == 'auto'"/>
                                     <field name="created_by"/>
                                     <field name="created_date"/>
                                     <field name="file_size"/>
@@ -98,8 +102,14 @@
             <search>
                 <field name="name"/>
                 <field name="description"/>
+                <field name="version"/>
                 <filter string="Active" name="active" domain="[('active', '=', True)]"/>
                 <filter string="Archived" name="inactive" domain="[('active', '=', False)]"/>
+                <filter string="Auto-save Enabled" name="auto_save" domain="[('auto_save_enabled', '=', True)]"/>
+                <group expand="0" string="Group By">
+                    <filter string="Last Modified By" name="group_modified_by" context="{'group_by': 'last_modified_by'}"/>
+                    <filter string="Version" name="group_version" context="{'group_by': 'version'}"/>
+                </group>
             </search>
         </field>
     </record>
