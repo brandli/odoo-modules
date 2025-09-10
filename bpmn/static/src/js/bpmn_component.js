@@ -4,13 +4,14 @@ import { Component, useRef, onMounted, onWillDestroy, onPatched, useState, xml }
 import { registry as webRegistry } from "@web/core/registry";
 
 /**
- * BPMN OWL Component - Production Implementation
+ * BPMN OWL Component - Phase 2.1 Editor Implementation
  * 
- * Architecture-compliant OWL component implementing:
- * - Enhanced memory management with proper lifecycle hooks
- * - Container-based integration using useRef
- * - Reactive state management with useState
- * - Proper cleanup and resource management
+ * Enhanced editor component implementing:
+ * - Full BPMN modeler with editing capabilities
+ * - Element palette for drag-and-drop creation
+ * - Undo/redo functionality
+ * - Element deletion and selection
+ * - Auto-save with version control
  */
 export class BPMNOwlComponent extends Component {
     static template = xml`
@@ -20,9 +21,10 @@ export class BPMNOwlComponent extends Component {
                 <div class="card-header py-2">
                     <div class="d-flex justify-content-between align-items-center">
                         <h6 class="mb-0 text-primary">
-                            <i class="fa fa-sitemap me-2"/>BPMN Diagram
+                            <i class="fa fa-sitemap me-2"/>BPMN Editor
                         </h6>
                         <div class="btn-toolbar" role="toolbar">
+                            <!-- File operations -->
                             <div class="btn-group me-2" role="group">
                                 <button type="button" 
                                         class="btn btn-outline-primary btn-sm" 
@@ -41,6 +43,24 @@ export class BPMNOwlComponent extends Component {
                                     <i t-else="" class="fa fa-save"/>
                                     <span t-if="state.saving"> Saving...</span>
                                     <span t-else=""> Save</span>
+                                </button>
+                            </div>
+                            
+                            <!-- Edit operations -->
+                            <div class="btn-group me-2" role="group" t-if="state.loaded">
+                                <button type="button" 
+                                        class="btn btn-outline-secondary btn-sm" 
+                                        t-on-click="undo"
+                                        t-att-disabled="!state.canUndo"
+                                        title="Undo (Ctrl+Z)">
+                                    <i class="fa fa-undo"/>
+                                </button>
+                                <button type="button" 
+                                        class="btn btn-outline-secondary btn-sm" 
+                                        t-on-click="redo"
+                                        t-att-disabled="!state.canRedo"
+                                        title="Redo (Ctrl+Y)">
+                                    <i class="fa fa-repeat"/>
                                 </button>
                             </div>
                             
@@ -66,7 +86,7 @@ export class BPMNOwlComponent extends Component {
                                 </button>
                             </div>
                             
-                            <!-- Additional controls -->
+                            <!-- Selection controls -->
                             <div class="btn-group" role="group" t-if="state.loaded">
                                 <button type="button" 
                                         class="btn btn-outline-secondary btn-sm" 
@@ -77,31 +97,26 @@ export class BPMNOwlComponent extends Component {
                                 </button>
                                 <button type="button" 
                                         class="btn btn-outline-danger btn-sm" 
-                                        t-on-click="deleteDiagram"
-                                        t-att-disabled="!state.recordId"
-                                        title="Delete diagram">
+                                        t-on-click="deleteSelected"
+                                        t-att-disabled="!state.selectedElement"
+                                        title="Delete selected (Del)">
                                     <i class="fa fa-trash"/>
                                 </button>
                             </div>
                         </div>
                     </div>
-                </div>
-                
-                <!-- Status info -->
-                <div class="card-body py-2" t-if="state.loaded">
-                    <div class="row small text-muted">
+                    
+                    <!-- Status row -->
+                    <div class="row small text-muted mt-2">
                         <div class="col-md-6">
-                            <span t-if="state.diagramTitle" class="me-3">
-                                <i class="fa fa-tag me-1"/><span t-esc="state.diagramTitle"/>
-                            </span>
-                            <span t-if="state.elementCount > 0" class="me-3">
-                                <i class="fa fa-cubes me-1"/><span t-esc="state.elementCount"/> elements
-                            </span>
-                        </div>
-                        <div class="col-md-6 text-end">
                             <span t-if="state.selectedElement" class="me-3">
                                 <i class="fa fa-mouse-pointer me-1"/>Selected: <code t-esc="state.selectedElement"/>
                             </span>
+                            <span t-if="state.modificationCount > 0" class="me-3">
+                                <i class="fa fa-edit me-1"/>Changes: <span t-esc="state.modificationCount"/>
+                            </span>
+                        </div>
+                        <div class="col-md-6 text-end">
                             <span>
                                 <i class="fa fa-search me-1"/>Zoom: <span t-esc="Math.round(state.zoomLevel * 100)"/>%
                             </span>
@@ -110,7 +125,6 @@ export class BPMNOwlComponent extends Component {
                 </div>
             </div>
 
-            
             <!-- Messages -->
             <div t-if="state.message" 
                  class="alert"
@@ -120,41 +134,125 @@ export class BPMNOwlComponent extends Component {
                 <span t-esc="state.message"/>
             </div>
             
-            <!-- Error state indicator -->
-            <div t-if="state.isCircuitOpen" 
-                 class="alert alert-warning d-flex justify-content-between align-items-center">
-                <div>
-                    <i class="fa fa-exclamation-triangle me-2"/>
-                    <strong>System Protection Active</strong> - Please wait or try again later
-                </div>
-                <button type="button" 
-                        class="btn btn-outline-warning btn-sm" 
-                        t-on-click="manualResetCircuitBreaker">
-                    <i class="fa fa-refresh me-1"/>Reset
-                </button>
-            </div>
-            
-            <!-- BPMN Canvas -->
-            <div class="card">
-                <div t-ref="bpmnContainer" 
-                     class="bpmn-canvas card-body p-0" 
-                     style="height: 500px; background: #fff;">
-                    <div t-if="!state.loaded" 
-                         class="d-flex align-items-center justify-content-center h-100">
-                        <div class="text-center text-muted">
-                            <div t-if="state.loading">
-                                <i class="fa fa-spinner fa-spin fa-2x mb-3"/>
-                                <div>Loading diagram...</div>
-                            </div>
-                            <div t-else="">
-                                <i class="fa fa-sitemap fa-2x mb-3"/>
-                                <div>No diagram loaded</div>
-                                <div class="small mt-2">
+            <!-- Main editing area -->
+            <div class="row">
+                <!-- Element Palette -->
+                <div class="col-md-2" t-if="state.loaded">
+                    <div class="card">
+                        <div class="card-header py-2">
+                            <h6 class="mb-0">
+                                <i class="fa fa-th-large me-2"/>Elements
+                            </h6>
+                        </div>
+                        <div class="card-body p-2">
+                            <!-- Start Events -->
+                            <div class="mb-3">
+                                <div class="fw-bold small mb-2">Start Events</div>
+                                <div class="d-grid gap-1">
                                     <button type="button" 
-                                            class="btn btn-outline-primary btn-sm mt-2" 
-                                            t-on-click="createDefaultDiagram">
-                                        <i class="fa fa-plus me-1"/>Create Default Diagram
+                                            class="btn btn-outline-primary btn-sm text-start"
+                                            t-on-click="() => this.createElement('bpmn:StartEvent')"
+                                            title="Start Event">
+                                        <i class="fa fa-play-circle me-2"/>Start Event
                                     </button>
+                                </div>
+                            </div>
+                            
+                            <!-- Tasks -->
+                            <div class="mb-3">
+                                <div class="fw-bold small mb-2">Tasks</div>
+                                <div class="d-grid gap-1">
+                                    <button type="button" 
+                                            class="btn btn-outline-secondary btn-sm text-start"
+                                            t-on-click="() => this.createElement('bpmn:Task')"
+                                            title="Task">
+                                        <i class="fa fa-square me-2"/>Task
+                                    </button>
+                                    <button type="button" 
+                                            class="btn btn-outline-secondary btn-sm text-start"
+                                            t-on-click="() => this.createElement('bpmn:UserTask')"
+                                            title="User Task">
+                                        <i class="fa fa-user me-2"/>User Task
+                                    </button>
+                                    <button type="button" 
+                                            class="btn btn-outline-secondary btn-sm text-start"
+                                            t-on-click="() => this.createElement('bpmn:ServiceTask')"
+                                            title="Service Task">
+                                        <i class="fa fa-cog me-2"/>Service Task
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- End Events -->
+                            <div class="mb-3">
+                                <div class="fw-bold small mb-2">End Events</div>
+                                <div class="d-grid gap-1">
+                                    <button type="button" 
+                                            class="btn btn-outline-danger btn-sm text-start"
+                                            t-on-click="() => this.createElement('bpmn:EndEvent')"
+                                            title="End Event">
+                                        <i class="fa fa-stop-circle me-2"/>End Event
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- Gateways -->
+                            <div class="mb-3">
+                                <div class="fw-bold small mb-2">Gateways</div>
+                                <div class="d-grid gap-1">
+                                    <button type="button" 
+                                            class="btn btn-outline-warning btn-sm text-start"
+                                            t-on-click="() => this.createElement('bpmn:ExclusiveGateway')"
+                                            title="Exclusive Gateway">
+                                        <i class="fa fa-diamond me-2"/>XOR Gateway
+                                    </button>
+                                    <button type="button" 
+                                            class="btn btn-outline-warning btn-sm text-start"
+                                            t-on-click="() => this.createElement('bpmn:ParallelGateway')"
+                                            title="Parallel Gateway">
+                                        <i class="fa fa-plus me-2"/>AND Gateway
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- BPMN Canvas -->
+                <div class="col-md-10">
+                    <div class="card">
+                        <div t-ref="bpmnContainer" 
+                             class="bpmn-canvas card-body p-0" 
+                             style="height: 500px; background: #fff;">
+                            <div t-if="!state.loaded" 
+                                 class="d-flex align-items-center justify-content-center h-100">
+                                <div class="text-center text-muted">
+                                    <div t-if="state.loading">
+                                        <i class="fa fa-spinner fa-spin fa-2x mb-3"/>
+                                        <div>Loading diagram...</div>
+                                    </div>
+                                    <div t-else="">
+                                        <i class="fa fa-sitemap fa-2x mb-3"/>
+                                        <div>No diagram loaded</div>
+                                        <div class="small mt-2" t-if="!state.error">
+                                            <button type="button" 
+                                                    class="btn btn-outline-primary btn-sm mt-2" 
+                                                    t-on-click="createDefaultDiagram">
+                                                <i class="fa fa-plus me-1"/>Create Default Diagram
+                                            </button>
+                                        </div>
+                                        <div class="small mt-2 text-danger" t-if="state.error">
+                                            <div class="mb-2">
+                                                <i class="fa fa-exclamation-triangle me-1"/>
+                                                Editor initialization failed
+                                            </div>
+                                            <button type="button" 
+                                                    class="btn btn-outline-secondary btn-sm" 
+                                                    t-on-click="retryInitialization">
+                                                <i class="fa fa-refresh me-1"/>Retry Initialization
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -167,1571 +265,514 @@ export class BPMNOwlComponent extends Component {
     setup() {
         this.containerRef = useRef("bpmnContainer");
         this.state = useState({
+            loaded: false,
             loading: false,
             saving: false,
-            loaded: false,
-            hasSaveableContent: false,
-            showReloadButton: false,
-            message: "",
             error: false,
-            // Enhanced state management with database integration
+            message: '',
             selectedElement: null,
-            zoomLevel: 1,
-            elementCount: 0,
-            diagramTitle: '',
-            lastModified: null,
-            viewChanged: 0,
-            // Database integration state
-            recordId: null,
-            fieldValue: '',
-            dbConnected: false,
-            lastSyncTime: null,
-            // Error boundary state
-            isCircuitOpen: false,
-            errorCount: 0,
-            recoveryInProgress: false,
-            // Track current XML content for change detection
-            currentXMLContent: '',
-            // Loading state to prevent multiple simultaneous loads
-            isLoading: false
+            zoomLevel: 1.0,
+            hasSaveableContent: false,
+            modificationCount: 0,
+            canUndo: false,
+            canRedo: false
         });
+
+        // BPMN.js modeler instance
+        this.modeler = null;
         
-        // Comprehensive memory management tracking
-        this.viewer = null;
-        this.eventListeners = new Map(); // Track all event listeners for cleanup
-        this.timers = new Set(); // Track all timers for cleanup
-        this.animationFrames = new Set(); // Track animation frames for cleanup
-        this.canvasContexts = new Set(); // Track canvas contexts for cleanup
-        this.observables = new Set(); // Track observables/subscriptions for cleanup
-        this.domReferences = new WeakMap(); // Weak references to prevent memory leaks
-        this.isDestroyed = false; // Prevent operations after destruction
-        this.intersectionObserver = null; // Track visibility changes
-        this.isVisible = true; // Track current visibility state
+        // Command stack for undo/redo
+        this.commandStack = null;
         
-        // Error boundary and circuit breaker patterns
-        this.errorCount = 0; // Track consecutive errors
-        this.lastErrorTime = null; // Track last error timestamp
-        this.isCircuitOpen = false; // Circuit breaker state
-        this.recoveryAttempts = 0; // Track recovery attempts
-        this.maxRetries = 3; // Maximum retry attempts
-        this.circuitBreakerThreshold = 3; // Errors before circuit opens
-        this.circuitBreakerCooldown = 30000; // 30 seconds cooldown
-        this.baseRetryDelay = 1000; // Base delay for exponential backoff (1 second)
+        // Auto-save settings
+        this.autoSaveInterval = null;
+        this.autoSaveDelay = 30000; // 30 seconds
         
-        onMounted(() => {
-            this.isDestroyed = false;
-            
-            // Add keyboard shortcuts
+        // Setup lifecycle hooks
+        onMounted(() => this.onMounted());
+        onWillDestroy(() => this.onWillDestroy());
+        onPatched(() => this.onPatched());
+    }
+
+    async onMounted() {
+        console.log('BPMNOwlComponent: Component mounted');
+        console.log('BPMNOwlComponent: Checking BPMN.js availability:', typeof window.BpmnJS);
+        console.log('BPMNOwlComponent: Window object keys containing "Bpmn":', Object.keys(window).filter(k => k.toLowerCase().includes('bpmn')));
+        console.log('BPMNOwlComponent: Container ref:', this.containerRef.el);
+        
+        try {
+            await this.initializeBPMNModeler();
+            await this.loadDiagramFromDatabase();
             this.setupKeyboardShortcuts();
-            
-            // Initialize database connection and field monitoring
-            this.initializeDatabaseConnection();
-            
-            // Setup visibility observer for tab switching
-            this.setupVisibilityObserver();
-            
-            // Check if this is a remount after tab switch
-            this.handlePotentialRemount();
-            
-            // Phase 1: Auto-load diagram if XML data is present in database
-            this.safeSetTimeout(() => {
-                this.autoLoadDiagramFromDatabase();
-            }, 500); // Small delay to ensure DOM is fully ready
-            
-            // Start monitoring for database field changes
-            this.startDatabaseFieldMonitoring();
-            
-            // Check for initial saveable content
-            this.safeSetTimeout(() => {
-                this.updateSaveableContentState();
-            }, 1000); // Give time for DOM to be ready
-            
-            // Auto-create default diagram for new records
-            this.safeSetTimeout(() => {
-                const recordId = this.detectRecordId();
-                const fieldValue = this.getDatabaseFieldValue();
-                
-                if ((recordId === null || recordId === 'new') && (!fieldValue || fieldValue.trim().length === 0)) {
-                    this.createDefaultDiagram();
-                }
-            }, 1500); // Give more time for everything to be ready
-            
-            // Additional check with longer delay in case the first one fails
-            this.safeSetTimeout(() => {
-                // Only create if still no content and no diagram loaded
-                if (!this.state.loaded && !this.state.loading) {
-                    const recordId = this.detectRecordId();
-                    const fieldValue = this.getDatabaseFieldValue();
-                    
-                    if ((recordId === null || recordId === 'new') && (!fieldValue || fieldValue.trim().length === 0)) {
-                        this.createDefaultDiagram();
-                    }
-                }
-            }, 3000); // Even longer delay as fallback
-        });
-        
-        onPatched(() => {
-            // OWL lifecycle hook - called after each re-render
-            this.handleComponentPatched();
-        });
-        
-        onWillDestroy(() => {
-            this.isDestroyed = true;
-            
-            // Cleanup visibility observer
-            this.cleanupVisibilityObserver();
-            
-            this.performComprehensiveCleanup();
-        });
-    }
-
-    /**
-     * Performs comprehensive memory management cleanup as recommended by architecture
-     * Prevents memory leaks from event listeners, timers, canvas contexts, and DOM references
-     */
-    performComprehensiveCleanup() {
-        // 1. Cancel all pending animation frames
-        for (const frameId of this.animationFrames) {
-            cancelAnimationFrame(frameId);
-        }
-        this.animationFrames.clear();
-        
-        // 2. Clear all timers (timeouts and intervals)
-        for (const timerId of this.timers) {
-            clearTimeout(timerId);
-            clearInterval(timerId);
-        }
-        this.timers.clear();
-        
-        // 3. Clean up all observables and subscriptions
-        for (const observable of this.observables) {
-            if (observable && typeof observable.unsubscribe === 'function') {
-                observable.unsubscribe();
-            }
-        }
-        this.observables.clear();
-        
-        // 4. Clean up all canvas contexts
-        for (const context of this.canvasContexts) {
-            try {
-                // Try different cleanup approaches based on context type
-                if (context && typeof context.clearRect === 'function') {
-                    // HTML5 Canvas context
-                    const canvas = context.canvas;
-                    if (canvas) {
-                        context.clearRect(0, 0, canvas.width, canvas.height);
-                    }
-                } else if (context && context.remove && typeof context.remove === 'function') {
-                    // DOM element that can be removed
-                    context.remove();
-                } else if (context && context.innerHTML !== undefined) {
-                    // DOM element that can be cleared
-                    context.innerHTML = '';
-                }
-            } catch (error) {
-                console.warn('BPMNOwlComponent: Error cleaning canvas context:', error);
-                // Continue with other cleanup even if one fails
-            }
-        }
-        this.canvasContexts.clear();
-        
-        // 5. Remove BPMN.js viewer and all its event listeners
-        if (this.viewer) {
-            try {
-                // Remove all tracked event listeners explicitly
-                for (const [eventName, handler] of this.eventListeners) {
-                    if (eventName === 'keydown') {
-                        // Remove document-level keyboard listener
-                        document.removeEventListener('keydown', handler);
-                    } else if (eventName === 'container-focus') {
-                        // Remove container focus listener
-                        if (this.containerRef.el) {
-                            this.containerRef.el.removeEventListener('focus', handler, true);
-                        }
-                    } else if (eventName === 'container-click') {
-                        // Remove container click listener
-                        if (this.containerRef.el) {
-                            this.containerRef.el.removeEventListener('click', handler, true);
-                        }
-                    } else {
-                        // Remove BPMN viewer event listeners
-                        this.viewer.off(eventName, handler);
-                    }
-                }
-                this.eventListeners.clear();
-                
-                // Additional BPMN.js cleanup with defensive programming
-                try {
-                    const eventBus = this.viewer.get('eventBus');
-                    if (eventBus && typeof eventBus.off === 'function') {
-                        // Remove any remaining listeners from event bus
-                        eventBus.off();
-                    }
-                } catch (error) {
-                    console.warn('BPMNOwlComponent: Could not access BPMN.js event bus:', error);
-                }
-                
-                // Clean up internal BPMN.js services defensively
-                try {
-                    const canvas = this.viewer.get('canvas');
-                    if (canvas) {
-                        // Try to get canvas context for tracking (defensive)
-                        let canvasElement = null;
-                        
-                        if (canvas._svg && typeof canvas._svg.node === 'function') {
-                            canvasElement = canvas._svg.node();
-                        } else if (canvas._svg && canvas._svg.element) {
-                            canvasElement = canvas._svg.element;
-                        } else if (canvas._container) {
-                            canvasElement = canvas._container;
-                        }
-                        
-                        if (canvasElement) {
-                            this.canvasContexts.add(canvasElement);
-                        }
-                    }
-                } catch (error) {
-                    console.warn('BPMNOwlComponent: Could not access BPMN.js canvas for cleanup:', error);
-                }
-                
-                // Destroy BPMN.js viewer instance
-                this.viewer.destroy();
-                
-            } catch (error) {
-                console.error('BPMNOwlComponent: Error during viewer cleanup:', error);
-            } finally {
-                this.viewer = null;
-            }
-        }
-        
-        // 6. Clear DOM references and container
-        if (this.containerRef && this.containerRef.el) {
-            // Clear container content
-            this.containerRef.el.innerHTML = '';
-            
-            // Remove any remaining event listeners from container
-            const container = this.containerRef.el;
-            const newContainer = container.cloneNode(false);
-            if (container.parentNode) {
-                container.parentNode.replaceChild(newContainer, container);
-            }
-        }
-        
-        // 7. Reset all state to prevent stale references
-        try {
-            Object.assign(this.state, {
-                loading: false,
-                loaded: false,
-                message: "",
-                error: false,
-                selectedElement: null,
-                zoomLevel: 1,
-                elementCount: 0,
-                diagramTitle: '',
-                lastModified: null,
-                viewChanged: 0
-            });
+            this.startAutoSave();
         } catch (error) {
-            console.warn('BPMNOwlComponent: Error resetting state:', error);
-        }
-        
-        // 9. Cleanup visibility observer
-        this.cleanupVisibilityObserver();
-        
-        // 10. Clear WeakMap references
-        this.domReferences = new WeakMap();
-    }
-
-    /**
-     * Setup visibility observer for tab switching detection
-     * This is the elegant OWL/Odoo way to handle component visibility
-     */
-    setupVisibilityObserver() {
-        if (!this.containerRef.el || this.isDestroyed) return;
-        
-        console.log('BPMNOwlComponent: Setting up visibility observer for tab switching...');
-        
-        // Method 1: IntersectionObserver for visibility changes
-        this.intersectionObserver = new IntersectionObserver((entries) => {
-            if (this.isDestroyed) return;
-            
-            const entry = entries[0];
-            const isVisible = entry.isIntersecting && entry.intersectionRatio > 0;
-            
-            if (isVisible !== this.isVisible) {
-                console.log('BPMNOwlComponent: Visibility changed:', this.isVisible, '→', isVisible);
-                this.isVisible = isVisible;
-                
-                if (isVisible) {
-                    // Component became visible (tab activated) - add small delay to ensure DOM is ready
-                    this.safeSetTimeout(() => {
-                        this.handleTabActivated();
-                    }, 100);
-                } else {
-                    // Component became hidden (tab deactivated)
-                    this.handleTabDeactivated();
-                }
-            }
-        }, {
-            threshold: [0, 0.1] // Trigger when component becomes visible or invisible
-        });
-        
-        this.intersectionObserver.observe(this.containerRef.el);
-        
-        // Method 2: Additional visibility check using focus/blur events on container
-        const containerFocusHandler = () => {
-            if (this.isDestroyed) return;
-            console.log('BPMNOwlComponent: Container focus detected - checking visibility...');
-            this.safeSetTimeout(() => {
-                this.checkAndHandleVisibilityChange();
-            }, 50);
-        };
-        
-        const containerClickHandler = () => {
-            if (this.isDestroyed) return;
-            console.log('BPMNOwlComponent: Container click detected - checking visibility...');
-            this.safeSetTimeout(() => {
-                this.checkAndHandleVisibilityChange();
-            }, 50);
-        };
-        
-        this.containerRef.el.addEventListener('focus', containerFocusHandler, true);
-        this.containerRef.el.addEventListener('click', containerClickHandler, true);
-        
-        // Track these for cleanup
-        this.eventListeners.set('container-focus', containerFocusHandler);
-        this.eventListeners.set('container-click', containerClickHandler);
-        
-        // Method 3: Periodic visibility check as fallback
-        const periodicCheck = () => {
-            if (this.isDestroyed) return;
-            this.checkAndHandleVisibilityChange();
-            this.safeSetTimeout(periodicCheck, 2000); // Check every 2 seconds
-        };
-        this.safeSetTimeout(periodicCheck, 2000);
-        
-        console.log('BPMNOwlComponent: Visibility observer setup complete');
-    }
-    
-    /**
-     * Manual visibility check and handling
-     */
-    checkAndHandleVisibilityChange() {
-        if (this.isDestroyed || !this.containerRef.el) return;
-        
-        // Check if container is actually visible in viewport
-        const rect = this.containerRef.el.getBoundingClientRect();
-        const isCurrentlyVisible = rect.width > 0 && rect.height > 0 && 
-                                  rect.top < window.innerHeight && rect.bottom > 0;
-        
-        if (isCurrentlyVisible !== this.isVisible) {
-            console.log('BPMNOwlComponent: Manual visibility check - changed:', this.isVisible, '→', isCurrentlyVisible);
-            this.isVisible = isCurrentlyVisible;
-            
-            if (isCurrentlyVisible) {
-                this.handleTabActivated();
-            } else {
-                this.handleTabDeactivated();
-            }
-        }
-    }
-    
-    /**
-     * Cleanup visibility observer
-     */
-    cleanupVisibilityObserver() {
-        if (this.intersectionObserver) {
-            this.intersectionObserver.disconnect();
-            this.intersectionObserver = null;
-            console.log('BPMNOwlComponent: Visibility observer cleaned up');
-        }
-    }
-    
-    /**
-     * Handle potential remount after tab switch
-     * Since Odoo may destroy/recreate components during tab switches,
-     * we use localStorage to persist state across remounts
-     */
-    handlePotentialRemount() {
-        console.log('BPMNOwlComponent: Checking for remount after tab switch...');
-        
-        try {
-            const recordId = this.detectRecordId();
-            if (!recordId) return;
-            
-            // Check if we have persisted state for this record
-            const stateKey = `bpmn_component_state_${recordId}`;
-            const persistedState = localStorage.getItem(stateKey);
-            
-            if (persistedState) {
-                console.log('BPMNOwlComponent: Found persisted state from previous mount');
-                
-                try {
-                    const parsed = JSON.parse(persistedState);
-                    
-                    // Restore state
-                    if (parsed.currentXMLContent) {
-                        this.state.currentXMLContent = parsed.currentXMLContent;
-                        console.log('BPMNOwlComponent: Restored XML content from localStorage');
-                        
-                        // Force load the diagram immediately
-                        this.safeSetTimeout(() => {
-                            console.log('BPMNOwlComponent: Loading diagram from persisted state...');
-                            this.loadDiagramFromPersistedState(parsed.currentXMLContent);
-                        }, 200);
-                    }
-                    
-                    // Restore other relevant state
-                    if (parsed.hasSaveableContent !== undefined) {
-                        this.state.hasSaveableContent = parsed.hasSaveableContent;
-                    }
-                    if (parsed.diagramTitle) {
-                        this.state.diagramTitle = parsed.diagramTitle;
-                    }
-                    if (parsed.elementCount) {
-                        this.state.elementCount = parsed.elementCount;
-                    }
-                    
-                } catch (parseError) {
-                    console.warn('BPMNOwlComponent: Error parsing persisted state:', parseError);
-                    localStorage.removeItem(stateKey);
-                }
-            }
-            
-            // Clean up old states periodically
-            this.cleanupOldPersistedStates();
-        } catch (error) {
-            console.warn('BPMNOwlComponent: Error handling remount:', error);
-        }
-    }
-    
-    /**
-     * Load diagram from persisted state (faster than database reload)
-     */
-    async loadDiagramFromPersistedState(xmlContent) {
-        if (!xmlContent || this.isDestroyed) return;
-        
-        console.log('BPMNOwlComponent: Loading diagram from persisted XML content...');
-        
-        try {
-            this.state.loading = true;
-            this.state.error = false;
-            
-            // Check if BPMN.js is available
-            if (typeof window.BpmnJS === 'undefined') {
-                throw new Error('BPMN.js library not available');
-            }
-            
-            // Clean up existing viewer
-            if (this.viewer) {
-                this.viewer.destroy();
-                this.viewer = null;
-            }
-            
-            // Create new viewer
-            this.viewer = new window.BpmnJS({
-                container: this.containerRef.el,
-                keyboard: { bindTo: window }
-            });
-            
-            // Setup events
-            this.setupEventBridge();
-            
-            // Import XML
-            await this.viewer.importXML(xmlContent);
-            
-            // Success state
-            this.state.loaded = true;
-            this.state.hasSaveableContent = true;
-            this.state.loading = false;
-            this.state.error = false;
-            this.state.message = "";
-            this.state.currentXMLContent = xmlContent;
-            
-            // Update diagram info
-            this.updateDiagramInfo();
-            
-            console.log('BPMNOwlComponent: Diagram loaded successfully from persisted state');
-            
-        } catch (error) {
-            console.error('BPMNOwlComponent: Failed to load from persisted state:', error);
-            this.state.loading = false;
+            console.error('Error during component initialization:', error);
             this.state.error = true;
-            this.state.message = `❌ Failed to restore diagram: ${error.message}`;
-            
-            // Fallback to database load
-            this.safeSetTimeout(() => {
-                this.autoLoadDiagramFromDatabase();
-            }, 500);
+            this.state.message = `Initialization failed: ${error.message}`;
         }
     }
-    
-    /**
-     * Persist component state to localStorage for tab switching
-     */
-    persistComponentState() {
+
+    onWillDestroy() {
+        console.log('BPMNOwlComponent: Component will destroy');
+        this.cleanup();
+    }
+
+    onPatched() {
+        // Re-attach BPMN modeler if container was recreated
+        if (this.modeler && this.containerRef.el && !this.containerRef.el.querySelector('.djs-container')) {
+            this.attachModelerToContainer();
+        }
+    }
+
+    attachModelerToContainer() {
         try {
-            const recordId = this.detectRecordId();
-            if (!recordId || recordId === 'new') return;
-            
-            const stateKey = `bpmn_component_state_${recordId}`;
-            const stateToSave = {
-                currentXMLContent: this.state.currentXMLContent,
-                hasSaveableContent: this.state.hasSaveableContent,
-                diagramTitle: this.state.diagramTitle,
-                elementCount: this.state.elementCount,
-                timestamp: Date.now()
-            };
-            
-            localStorage.setItem(stateKey, JSON.stringify(stateToSave));
-            console.log('BPMNOwlComponent: State persisted to localStorage');
-            
+            if (this.modeler && this.containerRef.el) {
+                this.modeler.attachTo(this.containerRef.el);
+                console.log('BPMN Modeler re-attached to container');
+            }
         } catch (error) {
-            console.warn('BPMNOwlComponent: Error persisting state:', error);
+            console.error('Error re-attaching modeler to container:', error);
         }
     }
-    
-    /**
-     * Clean up old persisted states (keep only recent ones)
-     */
-    cleanupOldPersistedStates() {
+
+    async retryInitialization() {
+        console.log('BPMNOwlComponent: Retrying initialization...');
+        this.state.error = false;
+        this.state.loading = true;
+        this.state.message = 'Retrying initialization...';
+        
         try {
-            const keys = Object.keys(localStorage);
-            const bpmnKeys = keys.filter(key => key.startsWith('bpmn_component_state_'));
-            const now = Date.now();
-            const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+            // Clean up any existing modeler
+            if (this.modeler) {
+                this.modeler.destroy();
+                this.modeler = null;
+                this.commandStack = null;
+            }
             
-            bpmnKeys.forEach(key => {
-                try {
-                    const state = JSON.parse(localStorage.getItem(key));
-                    if (!state.timestamp || (now - state.timestamp) > maxAge) {
-                        localStorage.removeItem(key);
-                        console.log('BPMNOwlComponent: Cleaned up old persisted state:', key);
-                    }
-                } catch (error) {
-                    // Remove invalid entries
-                    localStorage.removeItem(key);
+            // Retry initialization
+            await this.initializeBPMNModeler();
+            await this.loadDiagramFromDatabase();
+            this.setupKeyboardShortcuts();
+            this.startAutoSave();
+            
+            this.state.message = 'Initialization successful';
+        } catch (error) {
+            console.error('Retry initialization failed:', error);
+            this.state.error = true;
+            this.state.message = `Retry failed: ${error.message}`;
+        } finally {
+            this.state.loading = false;
+        }
+    }
+
+    cleanup() {
+        // Stop auto-save
+        if (this.autoSaveInterval) {
+            clearInterval(this.autoSaveInterval);
+            this.autoSaveInterval = null;
+        }
+
+        // Remove keyboard shortcuts
+        this.removeKeyboardShortcuts();
+
+        // Destroy BPMN modeler
+        if (this.modeler) {
+            try {
+                this.modeler.destroy();
+            } catch (error) {
+                console.error('Error destroying BPMN modeler:', error);
+            }
+            this.modeler = null;
+            this.commandStack = null;
+        }
+    }
+
+    async initializeBPMNModeler() {
+        try {
+            // Check if BPMN modeler is available with retry logic
+            let retries = 0;
+            const maxRetries = 10;
+            while (typeof window.BpmnJS === 'undefined' && retries < maxRetries) {
+                console.log(`Waiting for BPMN.js library... (attempt ${retries + 1}/${maxRetries})`);
+                await new Promise(resolve => setTimeout(resolve, 500));
+                retries++;
+            }
+            
+            if (typeof window.BpmnJS === 'undefined') {
+                throw new Error('BPMN.js library not loaded after waiting');
+            }
+
+            // Ensure container is available
+            if (!this.containerRef.el) {
+                throw new Error('BPMN container element not available');
+            }
+
+            // Create BPMN modeler instance
+            this.modeler = new window.BpmnJS({
+                container: this.containerRef.el,
+                keyboard: {
+                    bindTo: window
                 }
             });
+
+            // Get command stack for undo/redo
+            this.commandStack = this.modeler.get('commandStack');
+
+            // Setup event listeners
+            this.setupModelerEventListeners();
+
+            console.log('BPMN Modeler initialized successfully');
+            
         } catch (error) {
-            console.warn('BPMNOwlComponent: Error cleaning up persisted states:', error);
+            console.error('Failed to initialize BPMN modeler:', error);
+            this.state.error = true;
+            this.state.message = `Failed to initialize BPMN editor: ${error.message}`;
+            throw error; // Re-throw to handle in calling method
         }
     }
-    
-    /**
-     * Handle tab activation - elegant re-attachment of BPMN viewer
-     */
-    async handleTabActivated() {
-        console.log('BPMNOwlComponent: Tab activated - checking if diagram needs restoration...');
+
+    setupModelerEventListeners() {
+        const eventBus = this.modeler.get('eventBus');
         
-        if (this.isDestroyed) return;
-        
-        // Check if we have a viewer but the container is empty or detached
-        const hasViewer = !!this.viewer;
-        const shouldHaveDiagram = this.state.loaded && this.state.currentXMLContent;
-        const containerIsEmpty = !this.containerRef.el.querySelector('.bjs-container') && 
-                                !this.containerRef.el.querySelector('svg');
-        
-        console.log('BPMNOwlComponent: Tab activation status:', {
-            hasViewer,
-            shouldHaveDiagram,
-            containerIsEmpty,
-            loaded: this.state.loaded,
-            hasXMLContent: !!this.state.currentXMLContent
-        });
-        
-        if (hasViewer && shouldHaveDiagram && containerIsEmpty) {
-            console.log('BPMNOwlComponent: Diagram needs restoration after tab switch');
-            
-            try {
-                // Re-attach the viewer to the container
-                await this.restoreDiagramAfterTabSwitch();
-            } catch (error) {
-                console.warn('BPMNOwlComponent: Failed to restore diagram after tab switch:', error);
-                // Fallback: reload from database
-                this.autoLoadDiagramFromDatabase();
-            }
-        } else if (!hasViewer && shouldHaveDiagram) {
-            console.log('BPMNOwlComponent: No viewer but have content - auto-loading...');
-            this.autoLoadDiagramFromDatabase();
-        } else if (hasViewer && shouldHaveDiagram && !containerIsEmpty) {
-            console.log('BPMNOwlComponent: Diagram already restored and visible');
-        } else if (!shouldHaveDiagram && this.state.currentXMLContent) {
-            console.log('BPMNOwlComponent: Have XML content but diagram not loaded - loading...');
-            this.autoLoadDiagramFromDatabase();
-        } else {
-            console.log('BPMNOwlComponent: No restoration needed - state OK');
-        }
-    }
-    
-    /**
-     * Handle tab deactivation - preserve viewer instance
-     */
-    handleTabDeactivated() {
-        console.log('BPMNOwlComponent: Tab deactivated - preserving viewer instance...');
-        
-        // Don't destroy the viewer, just note that it's hidden
-        // This preserves the instance and avoids recreation overhead
-        if (this.viewer && this.state.loaded) {
-            console.log('BPMNOwlComponent: Viewer preserved during tab switch');
-            
-            // Persist current state before tab switch
-            this.persistComponentState();
-        }
-    }
-    
-    /**
-     * Restore diagram after tab switch using elegant re-attachment
-     */
-    async restoreDiagramAfterTabSwitch() {
-        if (!this.viewer || !this.containerRef.el || this.isDestroyed) {
-            throw new Error('Cannot restore: viewer or container not available');
-        }
-        
-        console.log('BPMNOwlComponent: Restoring diagram after tab switch...');
-        
-        try {
-            // Save current XML content
-            const currentXML = await this.viewer.saveXML({ format: true });
-            
-            // Re-attach viewer to container (this is the elegant approach)
-            this.viewer.attachTo(this.containerRef.el);
-            
-            // If attachment succeeded, we're done
-            console.log('BPMNOwlComponent: Diagram successfully restored via re-attachment');
-            
-            // Update state to reflect restoration
-            this.state.message = '';
-            this.state.error = false;
-            
-            // Ensure zoom and view are correct
-            this.safeSetTimeout(() => {
-                this.updateDiagramInfo();
-            }, 100);
-            
-        } catch (attachError) {
-            console.warn('BPMNOwlComponent: Re-attachment failed, trying full reload:', attachError);
-            
-            // Fallback: destroy and recreate with current content
-            const currentXML = this.state.currentXMLContent;
-            if (currentXML) {
-                // Clean up current viewer
-                this.viewer.destroy();
-                this.viewer = null;
-                
-                // Recreate viewer
-                this.viewer = new window.BpmnJS({
-                    container: this.containerRef.el,
-                    keyboard: { bindTo: window }
-                });
-                
-                // Setup events
-                this.setupEventBridge();
-                
-                // Import XML
-                await this.viewer.importXML(currentXML);
-                
-                console.log('BPMNOwlComponent: Diagram restored via recreation');
+        // Element selection events
+        eventBus.on('selection.changed', (event) => {
+            const selectedElements = event.newSelection;
+            if (selectedElements.length > 0) {
+                this.state.selectedElement = selectedElements[0].id;
             } else {
-                throw new Error('No XML content available for restoration');
+                this.state.selectedElement = null;
             }
-        }
+        });
+
+        // Canvas zoom events
+        eventBus.on('canvas.viewbox.changed', (event) => {
+            this.state.zoomLevel = event.viewbox.scale || 1.0;
+        });
+
+        // Command stack events for undo/redo
+        eventBus.on('commandStack.changed', () => {
+            this.updateUndoRedoState();
+            this.state.modificationCount++;
+            this.state.hasSaveableContent = true;
+        });
+
+        // Element modification events
+        eventBus.on(['element.changed', 'elements.changed'], () => {
+            this.state.hasSaveableContent = true;
+        });
     }
-    
-    /**
-     * Handle OWL onPatched lifecycle - called after each re-render
-     * This is the OWL-native way to handle component updates
-     */
-    handleComponentPatched() {
-        if (this.isDestroyed) return;
-        
-        // Check if container reference is still valid after patch
-        if (!this.containerRef.el) {
-            console.warn('BPMNOwlComponent: Container lost after patch');
-            return;
-        }
-        
-        // Check if we need to restore diagram after a re-render
-        const hasViewer = !!this.viewer;
-        const shouldHaveDiagram = this.state.loaded && this.state.currentXMLContent;
-        const containerIsEmpty = !this.containerRef.el.querySelector('.bjs-container');
-        
-        if (hasViewer && shouldHaveDiagram && containerIsEmpty) {
-            console.log('BPMNOwlComponent: Container empty after patch - restoring diagram...');
-            
-            // Use timeout to avoid conflicts with OWL rendering
-            this.safeSetTimeout(() => {
-                this.restoreDiagramAfterTabSwitch().catch(error => {
-                    console.warn('BPMNOwlComponent: Restoration after patch failed:', error);
-                    // Fallback to auto-load
-                    this.autoLoadDiagramFromDatabase();
-                });
-            }, 50);
+
+    updateUndoRedoState() {
+        if (this.commandStack) {
+            this.state.canUndo = this.commandStack.canUndo();
+            this.state.canRedo = this.commandStack.canRedo();
         }
     }
 
-    /**
-     * Setup keyboard shortcuts for BPMN viewer
-     */
-    setupKeyboardShortcuts() {
-        const handleKeyDown = (event) => {
-            if (this.isDestroyed) return;
-            
-            // Only handle shortcuts when the BPMN viewer area is focused or active
-            const target = event.target;
-            const isInBpmnArea = target.closest('.bpmn-owl-component') || 
-                                target.closest('#bpmn-owl-mount-point') ||
-                                target.closest('.bpmn-canvas');
-            
-            if (!isInBpmnArea) return;
-            
-            switch (event.key) {
-                case 'Delete':
-                case 'Backspace':
-                    if (this.state.loaded && event.ctrlKey) {
-                        event.preventDefault();
-                        this.deleteDiagram();
-                    }
-                    break;
-                    
-                case 'Escape':
-                    if (this.state.selectedElement) {
-                        event.preventDefault();
-                        this.clearSelection();
-                    }
-                    break;
-                    
-                case '+':
-                case '=':
-                    if (this.state.loaded) {
-                        event.preventDefault();
-                        this.zoomIn();
-                    }
-                    break;
-                    
-                case '-':
-                    if (this.state.loaded) {
-                        event.preventDefault();
-                        this.zoomOut();
-                    }
-                    break;
-                    
-                case '0':
-                    if (this.state.loaded && event.ctrlKey) {
-                        event.preventDefault();
-                        this.zoomFit();
-                    }
-                    break;
-                    
-                case 's':
-                case 'S':
-                    if (this.state.hasSaveableContent && event.ctrlKey) {
-                        event.preventDefault();
-                        this.saveDiagramToDatabase();
-                    }
-                    break;
+    // Phase 2.1 Feature: Element Creation
+    async createElement(elementType) {
+        try {
+            if (!this.modeler) {
+                throw new Error('BPMN modeler not initialized');
             }
-        };
-        
-        // Add event listener and track it for cleanup
-        document.addEventListener('keydown', handleKeyDown);
-        this.eventListeners.set('keydown', handleKeyDown);
+
+            const elementFactory = this.modeler.get('elementFactory');
+            const canvas = this.modeler.get('canvas');
+            const create = this.modeler.get('create');
+
+            // Create element based on type
+            let element;
+            switch (elementType) {
+                case 'bpmn:StartEvent':
+                    element = elementFactory.createShape({ type: 'bpmn:StartEvent' });
+                    break;
+                case 'bpmn:Task':
+                    element = elementFactory.createShape({ type: 'bpmn:Task' });
+                    break;
+                case 'bpmn:UserTask':
+                    element = elementFactory.createShape({ type: 'bpmn:UserTask' });
+                    break;
+                case 'bpmn:ServiceTask':
+                    element = elementFactory.createShape({ type: 'bpmn:ServiceTask' });
+                    break;
+                case 'bpmn:EndEvent':
+                    element = elementFactory.createShape({ type: 'bpmn:EndEvent' });
+                    break;
+                case 'bpmn:ExclusiveGateway':
+                    element = elementFactory.createShape({ type: 'bpmn:ExclusiveGateway' });
+                    break;
+                case 'bpmn:ParallelGateway':
+                    element = elementFactory.createShape({ type: 'bpmn:ParallelGateway' });
+                    break;
+                default:
+                    throw new Error(`Unknown element type: ${elementType}`);
+            }
+
+            // Get center position of canvas
+            const viewbox = canvas.viewbox();
+            const position = {
+                x: viewbox.x + (viewbox.width / 2) - 50, // Center horizontally
+                y: viewbox.y + (viewbox.height / 2) - 25  // Center vertically
+            };
+
+            // Add element to canvas
+            const rootElement = canvas.getRootElement();
+            create.start(null, element, { x: position.x, y: position.y }, rootElement);
+
+            this.state.message = `${elementType.replace('bpmn:', '')} created successfully`;
+            this.state.error = false;
+
+        } catch (error) {
+            console.error('Error creating element:', error);
+            this.state.error = true;
+            this.state.message = `Failed to create element: ${error.message}`;
+        }
     }
 
-    /**
-     * Safe timer management methods for memory leak prevention
-     */
-    safeSetTimeout(callback, delay) {
-        if (this.isDestroyed) return null;
-        
-        const timerId = setTimeout(() => {
-            this.timers.delete(timerId);
-            if (!this.isDestroyed) {
-                callback();
-            }
-        }, delay);
-        
-        this.timers.add(timerId);
-        return timerId;
+    // Phase 2.1 Feature: Undo/Redo
+    undo() {
+        if (this.commandStack && this.commandStack.canUndo()) {
+            this.commandStack.undo();
+            this.state.message = 'Undone';
+            this.state.error = false;
+        }
     }
 
-    safeSetInterval(callback, delay) {
-        if (this.isDestroyed) return null;
-        
-        const intervalId = setInterval(() => {
-            if (this.isDestroyed) {
-                clearInterval(intervalId);
-                this.timers.delete(intervalId);
+    redo() {
+        if (this.commandStack && this.commandStack.canRedo()) {
+            this.commandStack.redo();
+            this.state.message = 'Redone';
+            this.state.error = false;
+        }
+    }
+
+    // Phase 2.1 Feature: Element Deletion
+    deleteSelected() {
+        try {
+            if (!this.state.selectedElement) {
                 return;
             }
-            callback();
-        }, delay);
-        
-        this.timers.add(intervalId);
-        return intervalId;
-    }
 
-    safeRequestAnimationFrame(callback) {
-        if (this.isDestroyed) return null;
-        
-        const frameId = requestAnimationFrame(() => {
-            this.animationFrames.delete(frameId);
-            if (!this.isDestroyed) {
-                callback();
-            }
-        });
-        
-        this.animationFrames.add(frameId);
-        return frameId;
-    }
-
-    /**
-     * Safe canvas context management
-     */
-    trackCanvasContext(context) {
-        if (!context || this.isDestroyed) {
-            return;
-        }
-        
-        try {
-            // Validate that this is a trackable context
-            const isValidContext = 
-                (typeof context.clearRect === 'function') ||  // HTML5 Canvas context
-                (context.remove && typeof context.remove === 'function') ||  // DOM element
-                (context.innerHTML !== undefined);  // DOM element with innerHTML
+            const elementRegistry = this.modeler.get('elementRegistry');
+            const modeling = this.modeler.get('modeling');
             
-            if (isValidContext) {
-                this.canvasContexts.add(context);
-            } else {
-                console.warn('BPMNOwlComponent: Context not trackable:', typeof context);
-            }
-        } catch (error) {
-            console.warn('BPMNOwlComponent: Error tracking canvas context:', error);
-        }
-    }
-
-    /**
-     * Safe observable subscription management
-     */
-    trackObservable(observable) {
-        if (observable && !this.isDestroyed) {
-            this.observables.add(observable);
-        }
-        return observable;
-    }
-
-    /**
-     * Error Boundary and Circuit Breaker Patterns
-     * Implements resilient error handling with automatic recovery
-     */
-
-    /**
-     * Check if circuit breaker should prevent operations
-     */
-    isCircuitBreakerOpen() {
-        if (!this.isCircuitOpen) return false;
-        
-        // Check if cooldown period has passed
-        const now = Date.now();
-        if (this.lastErrorTime && (now - this.lastErrorTime) > this.circuitBreakerCooldown) {
-            console.log('BPMNOwlComponent: Circuit breaker cooldown expired, attempting recovery');
-            this.resetCircuitBreaker();
-            return false;
-        }
-        
-        return true;
-    }
-
-    /**
-     * Record an error and update circuit breaker state
-     */
-    recordError(error, operation = 'unknown') {
-        this.errorCount++;
-        this.lastErrorTime = Date.now();
-        
-        // Update state for UI
-        if (!this.isDestroyed) {
-            this.state.errorCount = this.errorCount;
-        }
-        
-        console.error(`BPMNOwlComponent: Error in ${operation} (count: ${this.errorCount}):`, error);
-        
-        // Open circuit breaker if threshold reached
-        if (this.errorCount >= this.circuitBreakerThreshold) {
-            this.isCircuitOpen = true;
-            
-            // Update state for UI
-            if (!this.isDestroyed) {
-                this.state.isCircuitOpen = true;
-                this.state.error = true;
-                this.state.message = `⚠️ System protection activated. Too many errors detected. Please wait ${Math.round(this.circuitBreakerCooldown/1000)} seconds before trying again.`;
-            }
-            
-            console.warn('BPMNOwlComponent: Circuit breaker opened due to excessive errors');
-            
-            // Auto-recovery timer
-            this.safeSetTimeout(() => {
-                if (!this.isDestroyed) {
-                    this.attemptRecovery();
-                }
-            }, this.circuitBreakerCooldown);
-        }
-    }
-
-    /**
-     * Record successful operation and potentially reset error count
-     */
-    recordSuccess(operation = 'unknown') {
-        console.log(`BPMNOwlComponent: Successful ${operation} operation`);
-        
-        // Gradually reduce error count on success
-        if (this.errorCount > 0) {
-            this.errorCount = Math.max(0, this.errorCount - 1);
-            console.log(`BPMNOwlComponent: Error count reduced to ${this.errorCount}`);
-        }
-        
-        // Reset circuit breaker if it was open
-        if (this.isCircuitOpen) {
-            this.resetCircuitBreaker();
-        }
-    }
-
-    /**
-     * Reset circuit breaker to closed state
-     */
-    resetCircuitBreaker() {
-        this.isCircuitOpen = false;
-        this.errorCount = 0;
-        this.recoveryAttempts = 0;
-        this.lastErrorTime = null;
-        
-        // Update state for UI
-        if (!this.isDestroyed) {
-            this.state.isCircuitOpen = false;
-            this.state.errorCount = 0;
-            this.state.recoveryInProgress = false;
-            
-            if (this.state.error && this.state.message.includes('System protection activated')) {
+            const element = elementRegistry.get(this.state.selectedElement);
+            if (element) {
+                modeling.removeElements([element]);
+                this.state.message = 'Element deleted';
                 this.state.error = false;
-                this.state.message = '';
             }
-        }
-        
-        console.log('BPMNOwlComponent: Circuit breaker reset to closed state');
-    }
-
-    /**
-     * Attempt automatic recovery from circuit breaker state
-     */
-    async attemptRecovery() {
-        if (this.isDestroyed) return;
-        
-        this.recoveryAttempts++;
-        
-        // Update state for UI
-        if (!this.isDestroyed) {
-            this.state.recoveryInProgress = true;
-        }
-        
-        console.log(`BPMNOwlComponent: Attempting recovery (attempt ${this.recoveryAttempts})`);
-        
-        try {
-            // Test if BPMN.js is available
-            if (typeof window.BpmnJS === 'undefined') {
-                throw new Error('BPMN.js library still not available');
-            }
-            
-            // Test basic functionality
-            const testViewer = new window.BpmnJS();
-            testViewer.destroy(); // Immediate cleanup
-            
-            // Recovery successful
-            this.resetCircuitBreaker();
-            
-            if (!this.isDestroyed) {
-                this.state.message = '✅ System recovered automatically. You can try loading the diagram again.';
-            }
-            
-            // Clear recovery message after a delay
-            this.safeSetTimeout(() => {
-                if (!this.isDestroyed && this.state.message.includes('System recovered')) {
-                    this.state.message = '';
-                }
-            }, 5000);
-            
         } catch (error) {
-            console.warn('BPMNOwlComponent: Recovery attempt failed:', error);
-            
-            // Update state
-            if (!this.isDestroyed) {
-                this.state.recoveryInProgress = false;
-            }
-            
-            // Extend cooldown if recovery fails
-            if (this.recoveryAttempts < 3) {
-                const nextRecoveryDelay = this.circuitBreakerCooldown * (this.recoveryAttempts + 1);
-                this.safeSetTimeout(() => {
-                    if (!this.isDestroyed) {
-                        this.attemptRecovery();
-                    }
-                }, nextRecoveryDelay);
-            } else {
-                if (!this.isDestroyed) {
-                    this.state.message = '❌ Automatic recovery failed. Please refresh the page.';
-                }
-            }
+            console.error('Error deleting element:', error);
+            this.state.error = true;
+            this.state.message = `Failed to delete element: ${error.message}`;
         }
     }
 
-    /**
-     * Execute operation with retry and exponential backoff
-     */
-    async executeWithRetry(operation, operationName, maxAttempts = null) {
-        const attempts = maxAttempts || this.maxRetries;
-        
-        for (let attempt = 1; attempt <= attempts; attempt++) {
-            try {
-                if (this.isDestroyed) {
-                    throw new Error('Component destroyed during operation');
-                }
-                
-                // Check circuit breaker before each attempt
-                if (this.isCircuitBreakerOpen()) {
-                    throw new Error('Circuit breaker is open - operation blocked');
-                }
-                
-                console.log(`BPMNOwlComponent: Executing ${operationName} (attempt ${attempt}/${attempts})`);
-                
-                const result = await operation();
-                
-                // Record success
-                this.recordSuccess(operationName);
-                return result;
-                
-            } catch (error) {
-                console.warn(`BPMNOwlComponent: ${operationName} attempt ${attempt} failed:`, error);
-                
-                // Record error
-                this.recordError(error, operationName);
-                
-                // If this is the last attempt or circuit breaker is open, throw the error
-                if (attempt === attempts || this.isCircuitBreakerOpen()) {
-                    throw error;
-                }
-                
-                // Calculate exponential backoff delay
-                const delay = this.baseRetryDelay * Math.pow(2, attempt - 1);
-                const jitter = Math.random() * 1000; // Add jitter to prevent thundering herd
-                const totalDelay = delay + jitter;
-                
-                console.log(`BPMNOwlComponent: Retrying ${operationName} in ${Math.round(totalDelay)}ms`);
-                
-                // Wait before retry
-                await new Promise(resolve => {
-                    this.safeSetTimeout(resolve, totalDelay);
-                });
-            }
+    clearSelection() {
+        if (this.modeler) {
+            const selection = this.modeler.get('selection');
+            selection.select(null);
         }
     }
 
-    /**
-     * Safe error boundary wrapper for any operation
-     */
-    async safeExecute(operation, operationName, fallback = null) {
-        try {
-            if (this.isDestroyed) {
-                console.warn(`BPMNOwlComponent: Cannot execute ${operationName} - component destroyed`);
-                return fallback;
-            }
-            
-            return await operation();
-            
-        } catch (error) {
-            console.error(`BPMNOwlComponent: Safe execution failed for ${operationName}:`, error);
-            this.recordError(error, operationName);
-            
-            // Show user-friendly error message
-            if (!this.isDestroyed) {
-                this.state.error = true;
-                this.state.message = `❌ ${operationName} failed: ${error.message}`;
-            }
-            
-            return fallback;
-        }
-    }
-
-    /**
-     * Initialize database connection and detect current record
-     */
-    initializeDatabaseConnection() {
-        console.log('BPMNOwlComponent: Initializing database connection...');
-        console.log('BPMNOwlComponent: Current URL:', window.location.href);
-        
-        try {
-            // Extract record ID from multiple sources
-            const recordId = this.detectRecordId();
-            
-            if (recordId && recordId !== 'new') {
-                this.state.recordId = parseInt(recordId);
-                this.state.dbConnected = true;
-                console.log('BPMNOwlComponent: Database connection established, record ID:', recordId);
-            } else if (recordId === 'new') {
-                this.state.recordId = null;
-                this.state.dbConnected = true; // Still connected, just no record yet
-                console.log('BPMNOwlComponent: New record mode detected');
-                
-                // For new records, show a helpful message
-                this.state.message = "📝 Create a new BPMN process by adding XML content below and saving.";
-            } else {
-                console.warn('BPMNOwlComponent: Could not determine record ID - checking alternatives...');
-                
-                // Fallback: Wait a moment and try again (for dynamic loading)
-                this.safeSetTimeout(() => {
-                    const fallbackRecordId = this.detectRecordId();
-                    if (fallbackRecordId && fallbackRecordId !== 'new') {
-                        this.state.recordId = parseInt(fallbackRecordId);
-                        this.state.dbConnected = true;
-                        console.log('BPMNOwlComponent: Database connection established via fallback, record ID:', fallbackRecordId);
-                        this.state.message = ""; // Clear any previous message
-                    } else if (fallbackRecordId === 'new') {
-                        this.state.recordId = null;
-                        this.state.dbConnected = true;
-                        console.log('BPMNOwlComponent: New record mode confirmed via fallback');
-                        this.state.message = "📝 Create a new BPMN process by adding XML content below and saving.";
-                    } else {
-                        this.state.dbConnected = false;
-                        console.warn('BPMNOwlComponent: Still could not determine record ID after fallback');
-                        
-                        // Final fallback: Check if we have BPMN XML content anyway
-                        const xmlContent = this.getDatabaseFieldValue();
-                        if (xmlContent) {
-                            console.log('BPMNOwlComponent: No record ID but found XML content, enabling limited mode');
-                            this.state.dbConnected = true; // Enable limited functionality
-                            this.state.recordId = null; // Mark as unknown record
+    // Keyboard shortcuts setup
+    setupKeyboardShortcuts() {
+        this.keydownHandler = (event) => {
+            if (event.ctrlKey || event.metaKey) {
+                switch (event.key.toLowerCase()) {
+                    case 'z':
+                        if (event.shiftKey) {
+                            event.preventDefault();
+                            this.redo();
                         } else {
-                            this.state.dbConnected = false;
+                            event.preventDefault();
+                            this.undo();
                         }
-                    }
-                }, 1000);
+                        break;
+                    case 'y':
+                        event.preventDefault();
+                        this.redo();
+                        break;
+                    case 's':
+                        event.preventDefault();
+                        this.saveDiagramToDatabase();
+                        break;
+                }
+            } else if (event.key === 'Delete' || event.key === 'Backspace') {
+                if (this.state.selectedElement) {
+                    event.preventDefault();
+                    this.deleteSelected();
+                }
             }
-        } catch (error) {
-            console.error('BPMNOwlComponent: Database connection failed:', error);
-            this.state.dbConnected = false;
+        };
+
+        document.addEventListener('keydown', this.keydownHandler);
+    }
+
+    removeKeyboardShortcuts() {
+        if (this.keydownHandler) {
+            document.removeEventListener('keydown', this.keydownHandler);
+            this.keydownHandler = null;
         }
     }
 
-    /**
-     * Comprehensive record ID detection with multiple strategies
-     */
-    detectRecordId() {
-        console.log('BPMNOwlComponent: Attempting to detect record ID...');
-        console.log('BPMNOwlComponent: Current URL:', window.location.href);
-        
-        // Strategy 1: Extract from URL path (most common in Odoo)
-        // Handles URLs like: /odoo/action-171/2 or /web#id=2&action=171
-        const urlPath = window.location.pathname;
-        
-        // Check for "new" record creation mode
-        if (urlPath.includes('/new') || window.location.href.includes('/new')) {
-            console.log('BPMNOwlComponent: Detected new record creation mode');
-            return 'new';
-        }
-        
-        const urlPathMatch = urlPath.match(/\/(\d+)$/); // Match number at end of path
-        if (urlPathMatch) {
-            const recordId = urlPathMatch[1];
-            console.log('BPMNOwlComponent: Found record ID in URL path:', recordId);
-            return recordId;
-        }
-        
-        // Strategy 2: URL parameters (traditional ?id=123)
-        const urlParams = new URLSearchParams(window.location.search);
-        let recordId = urlParams.get('id');
-        if (recordId) {
-            console.log('BPMNOwlComponent: Found record ID in URL params:', recordId);
-            return recordId;
-        }
-        
-        // Strategy 3: Hash-based URLs (Odoo web client) - #id=123
-        const hash = window.location.hash;
-        if (hash) {
-            // Check for new record in hash
-            if (hash.includes('id=false') || hash.includes('id=null') || hash.includes('view_type=form') && !hash.includes('id=')) {
-                console.log('BPMNOwlComponent: Detected new record in hash');
-                return 'new';
+    // Auto-save functionality
+    startAutoSave() {
+        this.autoSaveInterval = setInterval(() => {
+            if (this.state.hasSaveableContent && !this.state.saving && this.modeler) {
+                this.autoSaveDiagram();
             }
-            
-            const hashMatch = hash.match(/[&#]id=(\d+)/);
-            if (hashMatch) {
-                recordId = hashMatch[1];
-                console.log('BPMNOwlComponent: Found record ID in hash:', recordId);
-                return recordId;
-            }
-        }
-        
-        // Strategy 4: Form view data attributes
-        const formView = document.querySelector('.o_form_view');
-        if (formView) {
-            const resId = formView.getAttribute('data-res-id') || 
-                         formView.getAttribute('data-record-id') ||
-                         formView.dataset.resId ||
-                         formView.dataset.recordId;
-            if (resId && resId !== 'false' && resId !== 'null') {
-                console.log('BPMNOwlComponent: Found record ID in form view:', resId);
-                return resId;
-            } else if (resId === 'false' || resId === 'null' || !resId) {
-                console.log('BPMNOwlComponent: Form view indicates new record');
-                return 'new';
-            }
-        }
-        
-        // Strategy 4.5: Check Odoo's internal record state
+        }, this.autoSaveDelay);
+    }
+
+    async autoSaveDiagram() {
         try {
-            const odooElement = document.querySelector('.o_main_content');
-            if (odooElement && odooElement.__owl__) {
-                const component = odooElement.__owl__.component;
-                if (component && component.env && component.env.services && component.env.services.action) {
-                    const action = component.env.services.action.currentController;
-                    if (action && action.model && action.model.root && action.model.root.resId) {
-                        const resId = action.model.root.resId;
-                        if (resId && resId !== 'virtual_1') {
-                            console.log('BPMNOwlComponent: Found record ID from Odoo internal state:', resId);
-                            return resId.toString();
-                        }
-                    }
-                }
+            const xml = await this.modeler.saveXML({ format: true });
+            
+            // Call auto-save API endpoint
+            const response = await this.env.services.rpc('/bpmn/auto_save', {
+                process_id: this.props.record.data.id,
+                xml_content: xml.xml
+            });
+
+            if (response.success) {
+                console.log('Auto-save successful');
+                // Don't show auto-save messages to avoid spam
+            } else {
+                console.warn('Auto-save failed:', response.error);
             }
-        } catch (e) {
-            // Ignore errors in internal state detection
+
+        } catch (error) {
+            console.error('Auto-save error:', error);
         }
-        
-        // Strategy 5: Check for new record indicators in DOM
-        const saveButton = document.querySelector('.o_form_button_save');
-        const createButton = document.querySelector('.o_form_button_create');
-        if (saveButton && saveButton.style.display !== 'none' && !createButton) {
-            console.log('BPMNOwlComponent: Save button visible, likely new record');
-            return 'new';
-        }
-        
-        // Strategy 6: Legacy DOM extraction
-        recordId = this.extractRecordIdFromDOM();
-        if (recordId) {
-            console.log('BPMNOwlComponent: Found record ID via legacy DOM extraction:', recordId);
-            return recordId;
-        }
-        
-        console.log('BPMNOwlComponent: No record ID found, assuming new record');
-        return 'new';
     }
 
-    /**
-     * Extract record ID from DOM context (legacy method)
-     */
-    extractRecordIdFromDOM() {
-        console.log('BPMNOwlComponent: Attempting legacy DOM record ID extraction...');
-        
-        // Method 1: Look for data-res-id attribute
-        const formElement = document.querySelector('[data-res-id]');
-        if (formElement) {
-            const resId = formElement.getAttribute('data-res-id');
-            console.log('BPMNOwlComponent: Found data-res-id:', resId);
-            return resId;
+    // Zoom controls
+    zoomFit() {
+        if (this.modeler) {
+            const canvas = this.modeler.get('canvas');
+            canvas.zoom('fit-viewport');
         }
-        
-        // Method 2: Look for hidden input with record ID
-        const recordInput = document.querySelector('input[name="id"]');
-        if (recordInput && recordInput.value) {
-            console.log('BPMNOwlComponent: Found record input value:', recordInput.value);
-            return recordInput.value;
-        }
-        
-        // Method 3: Extract from form action URL
-        const form = document.querySelector('form');
-        if (form && form.action) {
-            const match = form.action.match(/id=(\d+)/);
-            if (match) {
-                console.log('BPMNOwlComponent: Found record ID in form action:', match[1]);
-                return match[1];
-            }
-        }
-        
-        // Method 4: Look for the BPMN XML field and extract from its context
-        const xmlField = document.querySelector('textarea[id*="bpmn_xml"]');
-        if (xmlField) {
-            console.log('BPMNOwlComponent: Found XML field, checking for record context...');
-            
-            // Check if field has record ID in data attributes
-            if (xmlField.dataset.recordId) {
-                console.log('BPMNOwlComponent: Found record ID in XML field dataset:', xmlField.dataset.recordId);
-                return xmlField.dataset.recordId;
-            }
-            
-            // Look for parent with record context
-            const recordContainer = xmlField.closest('[data-record-id]') ||
-                                  xmlField.closest('[data-res-id]') ||
-                                  xmlField.closest('.o_form_view');
-            if (recordContainer) {
-                const recordId = recordContainer.getAttribute('data-record-id') ||
-                               recordContainer.getAttribute('data-res-id') ||
-                               recordContainer.dataset.recordId ||
-                               recordContainer.dataset.resId;
-                if (recordId) {
-                    console.log('BPMNOwlComponent: Found record ID in XML field container:', recordId);
-                    return recordId;
-                }
-            }
-        }
-        
-        // Method 5: Look for Odoo field widgets with record context
-        const fieldWidget = document.querySelector('.o_field_widget[data-record-id]') ||
-                           document.querySelector('.o_field_widget[data-res-id]');
-        if (fieldWidget) {
-            const recordId = fieldWidget.getAttribute('data-record-id') ||
-                           fieldWidget.getAttribute('data-res-id');
-            if (recordId) {
-                console.log('BPMNOwlComponent: Found record ID in field widget:', recordId);
-                return recordId;
-            }
-        }
-        
-        console.log('BPMNOwlComponent: Legacy DOM extraction failed');
-        return null;
     }
 
-    /**
-     * Debug helper method - call from browser console to diagnose connection issues
-     */
-    debugConnectionStatus() {
-        console.group('🔍 BPMN Component Debug Information');
-        
-        console.log('📍 Current URL:', window.location.href);
-        console.log('� URL Path:', window.location.pathname);
-        console.log('�🔍 URL Search Params:', window.location.search);
-        console.log('🔍 URL Hash:', window.location.hash);
-        
-        // Test URL path extraction
-        const urlPath = window.location.pathname;
-        const urlPathMatch = urlPath.match(/\/(\d+)$/);
-        console.log('🎯 URL Path Record ID Detection:', urlPathMatch ? urlPathMatch[1] : 'Not found');
-        
-        console.log('🎯 Component State:');
-        console.log('  - DB Connected:', this.state.dbConnected);
-        console.log('  - Record ID:', this.state.recordId);
-        console.log('  - Field Value Length:', this.state.fieldValue?.length || 0);
-        console.log('  - Last Sync:', this.state.lastSyncTime);
-        
-        console.log('🔍 DOM Analysis:');
-        const xmlField = document.querySelector('textarea[id*="bpmn_xml"]');
-        console.log('  - XML Field Found:', !!xmlField);
-        console.log('  - XML Field Value Length:', xmlField?.value?.length || 0);
-        
-        console.log('🎯 Record ID Detection Results:');
-        const detectedId = this.detectRecordId();
-        console.log('  - Detected ID:', detectedId);
-        
-        console.log('📊 Field Content Sample:');
-        const content = this.getDatabaseFieldValue();
-        if (content) {
-            console.log('  - Content Length:', content.length);
-            console.log('  - Content Preview:', content.substring(0, 200) + '...');
-            console.log('  - Is Valid BPMN:', content.includes('bpmn:definitions') || content.includes('<definitions'));
-        } else {
-            console.log('  - No content found');
+    zoomIn() {
+        if (this.modeler) {
+            const canvas = this.modeler.get('canvas');
+            canvas.zoom(this.state.zoomLevel + 0.1);
         }
-        
-        console.groupEnd();
-        
-        return {
-            url: window.location.href,
-            urlPath: window.location.pathname,
-            urlPathRecordId: urlPathMatch ? urlPathMatch[1] : null,
-            isNewRecord: detectedId === 'new',
-            dbConnected: this.state.dbConnected,
-            recordId: this.state.recordId,
-            hasXmlField: !!xmlField,
-            hasContent: !!content,
-            contentLength: content?.length || 0,
-            detectedId: detectedId
-        };
     }
 
-    /**
-     * Start monitoring database field changes for record navigation
-     * This handles cases where user navigates between records using Next/Previous
-     */
-    startDatabaseFieldMonitoring() {
-        console.log('BPMNOwlComponent: Starting database field monitoring...');
-        
-        const checkForDatabaseChanges = () => {
-            if (this.isDestroyed) return;
+    zoomOut() {
+        if (this.modeler) {
+            const canvas = this.modeler.get('canvas');
+            canvas.zoom(Math.max(0.1, this.state.zoomLevel - 0.1));
+        }
+    }
+
+    // Diagram loading and saving
+    async loadDiagramFromDatabase() {
+        this.state.loading = true;
+        this.state.error = false;
+        this.state.message = '';
+
+        try {
+            const result = await this.env.services.rpc('/bpmn/get_process_data', {
+                process_id: this.props.record.data.id
+            });
+
+            if (result.success && result.xml) {
+                await this.modeler.importXML(result.xml);
+                this.state.loaded = true;
+                this.state.hasSaveableContent = false;
+                this.state.modificationCount = 0;
+                this.updateUndoRedoState();
+                this.state.message = 'Diagram loaded successfully';
+            } else {
+                throw new Error(result.error || 'Failed to load diagram');
+            }
+
+        } catch (error) {
+            console.error('Error loading diagram:', error);
+            this.state.error = true;
+            this.state.message = `Failed to load diagram: ${error.message}`;
             
-            try {
-                // Get current field value from database field
-                const currentFieldValue = this.getDatabaseFieldValue();
-                const currentRecordId = this.getCurrentRecordId();
-                
-                // Check if record ID changed (navigation)
-                if (currentRecordId !== this.state.recordId) {
-                    console.log('BPMNOwlComponent: Record navigation detected:', this.state.recordId, '→', currentRecordId);
-                    this.state.recordId = currentRecordId;
-                    this.state.fieldValue = currentFieldValue;
-                    this.state.lastSyncTime = new Date().toISOString();
-                    
-                    if (currentFieldValue) {
-                        this.safeSetTimeout(() => {
-                            this.autoLoadDiagramFromDatabase();
-                        }, 300);
-                    } else {
-                        this.clearDiagram();
-                    }
-                }
-                // Check if field content changed for same record - BUT avoid clearing during tab switches
-                else if (currentFieldValue !== this.state.fieldValue) {
-                    console.log('BPMNOwlComponent: Database field changed for record', currentRecordId);
-                    
-                    // Special handling: if we're switching tabs and have a viewer, don't clear
-                    if (!this.isVisible && this.viewer && this.state.loaded) {
-                        console.log('BPMNOwlComponent: Field change detected during tab switch - preserving viewer');
-                        this.state.fieldValue = currentFieldValue;
-                        this.updateSaveableContentState();
-                        this.state.lastSyncTime = new Date().toISOString();
-                        return; // Don't clear or reload
-                    }
-                    
-                    this.state.fieldValue = currentFieldValue;
-                    
-                    // Check if there's saveable content
-                    this.updateSaveableContentState();
-                    this.state.lastSyncTime = new Date().toISOString();
-                    
-                    // Only clear and reload if we don't have a loaded diagram or the content is significantly different
-                    if (!this.state.loaded || (currentFieldValue && this.state.currentXMLContent !== currentFieldValue)) {
-                        if (currentFieldValue) {
-                            this.safeSetTimeout(() => {
-                                this.autoLoadDiagramFromDatabase();
-                            }, 300);
-                        } else {
-                            this.clearDiagram();
-                        }
-                    }
-                }
-                
-            } catch (error) {
-                console.warn('BPMNOwlComponent: Error monitoring database changes:', error);
+            // Only try to create default diagram if modeler is available
+            if (this.modeler) {
+                await this.createDefaultDiagram();
+            } else {
+                console.warn('Cannot create default diagram: modeler not initialized');
+            }
+        } finally {
+            this.state.loading = false;
+        }
+    }
+
+    async saveDiagramToDatabase() {
+        this.state.saving = true;
+        this.state.error = false;
+
+        try {
+            const result = await this.modeler.saveXML({ format: true });
+            
+            // Update the XML field in the form
+            await this.props.record.update({ bpmn_xml: result.xml });
+            
+            this.state.hasSaveableContent = false;
+            this.state.message = 'Diagram saved successfully';
+            this.state.error = false;
+
+        } catch (error) {
+            console.error('Error saving diagram:', error);
+            this.state.error = true;
+            this.state.message = `Failed to save diagram: ${error.message}`;
+        } finally {
+            this.state.saving = false;
+        }
+    }
+
+    async createDefaultDiagram() {
+        try {
+            // Ensure modeler is initialized before creating default diagram
+            if (!this.modeler) {
+                await this.initializeBPMNModeler();
             }
             
-            // Continue monitoring
-            this.safeSetTimeout(checkForDatabaseChanges, 1000); // Check every second
-        };
-        
-        // Start the monitoring loop
-        this.safeSetTimeout(checkForDatabaseChanges, 1000);
-    }
-
-    /**
-     * Get current record ID from various sources
-     */
-    getCurrentRecordId() {
-        // Use the enhanced detection method
-        const recordId = this.detectRecordId();
-        if (recordId === 'new') {
-            return null; // Treat 'new' as null for comparison purposes
-        }
-        return recordId ? parseInt(recordId) : null;
-    }
-
-    /**
-     * Get current database field value - Database-first approach
-     */
-    getDatabaseFieldValue() {
-        console.log('BPMNOwlComponent: Using database-first approach...');
-        
-        // PRIORITY 1: Use OWL props data (direct from database)
-        if (this.props && this.props.record) {
-            const record = this.props.record;
-            if (record.data && record.data.bpmn_xml !== undefined) {
-                const propValue = record.data.bpmn_xml || '';
-                console.log(`BPMNOwlComponent: Got value from database via props, length: ${propValue.length}`);
-                return propValue;
+            // Double-check modeler is available
+            if (!this.modeler) {
+                throw new Error('BPMN modeler could not be initialized');
             }
-        }
-        
-        // PRIORITY 2: Try to get from Odoo's field widget data
-        if (this.state.recordId) {
-            // Try to access the field widget directly
-            const fieldWidget = document.querySelector('[name="bpmn_xml"]');
-            if (fieldWidget && fieldWidget.closest('.o_field_widget')) {
-                const widget = fieldWidget.closest('.o_field_widget');
-                if (widget.__owl__ && widget.__owl__.component && widget.__owl__.component.props) {
-                    const widgetValue = widget.__owl__.component.props.record.data.bpmn_xml;
-                    if (widgetValue !== undefined) {
-                        console.log(`BPMNOwlComponent: Got value from field widget, length: ${widgetValue.length}`);
-                        return widgetValue || '';
-                    }
-                }
-            }
-        }
-        
-        // PRIORITY 3: DOM field search for immediate fallback
-        console.log('BPMNOwlComponent: Searching DOM for field value...');
-        let xmlField = document.querySelector('textarea[name="bpmn_xml"]') ||
-                      document.querySelector('textarea[id*="bpmn_xml"]') ||
-                      document.querySelector('#bpmn_xml_editor_field') ||
-                      document.querySelector('.o_field_text[data-field-name="bpmn_xml"]');
-        
-        if (!xmlField) {
-            const allTextareas = document.querySelectorAll('textarea');
-            console.log(`BPMNOwlComponent: Found ${allTextareas.length} textarea elements`);
             
-            for (const textarea of allTextareas) {
-                if (textarea.name === 'bpmn_xml' || 
-                    textarea.id.includes('bpmn_xml') ||
-                    textarea.getAttribute('data-field-name') === 'bpmn_xml') {
-                    xmlField = textarea;
-                    console.log('BPMNOwlComponent: Found bpmn_xml field in textarea search');
-                    break;
-                }
-            }
+            const defaultXML = this.getDefaultBPMNXML();
+            await this.modeler.importXML(defaultXML);
+            this.state.loaded = true;
+            this.state.hasSaveableContent = true;
+            this.state.message = 'Default diagram created';
+            this.state.error = false;
+        } catch (error) {
+            console.error('Error creating default diagram:', error);
+            this.state.error = true;
+            this.state.message = `Failed to create default diagram: ${error.message}`;
         }
-        
-        if (xmlField && xmlField.value && xmlField.value.trim()) {
-            const fieldValue = xmlField.value.trim();
-            console.log(`BPMNOwlComponent: Got DOM field value, length: ${fieldValue.length}`);
-            return fieldValue;
-        }
-        
-        // PRIORITY 4: Signal that we need to use API call
-        if (this.state.recordId) {
-            console.log('BPMNOwlComponent: No DOM data found, will attempt API call...');
-            return null; // Signal that we need to use API call
-        }
-        
-        console.log('BPMNOwlComponent: No data source available');
-        return '';
     }
 
-    /**
-     * Get default BPMN diagram XML for new records
-     */
     getDefaultBPMNXML() {
         return `<?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" 
-                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" 
-                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" 
-                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI" 
-                  id="Definitions_1" 
-                  targetNamespace="http://bpmn.io/schema/bpmn" 
-                  exporter="Camunda Modeler" 
-                  exporterVersion="5.0.0">
-  <bpmn:process id="Process_1" isExecutable="true">
-    <bpmn:startEvent id="StartEvent_1" name="Start">
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_1"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Process_1" isExecutable="false">
+    <bpmn:startEvent id="StartEvent_1">
       <bpmn:outgoing>Flow_1</bpmn:outgoing>
     </bpmn:startEvent>
     <bpmn:task id="Task_1" name="Sample Task">
       <bpmn:incoming>Flow_1</bpmn:incoming>
       <bpmn:outgoing>Flow_2</bpmn:outgoing>
     </bpmn:task>
-    <bpmn:endEvent id="EndEvent_1" name="End">
+    <bpmn:endEvent id="EndEvent_1">
       <bpmn:incoming>Flow_2</bpmn:incoming>
     </bpmn:endEvent>
     <bpmn:sequenceFlow id="Flow_1" sourceRef="StartEvent_1" targetRef="Task_1" />
@@ -1739,21 +780,14 @@ export class BPMNOwlComponent extends Component {
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_1">
-      <bpmndi:BPMNShape id="_BPMNShape_StartEvent_2" bpmnElement="StartEvent_1">
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
         <dc:Bounds x="179" y="99" width="36" height="36" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="185" y="142" width="25" height="14" />
-        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_1_di" bpmnElement="Task_1">
         <dc:Bounds x="270" y="77" width="100" height="80" />
-        <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="EndEvent_1_di" bpmnElement="EndEvent_1">
         <dc:Bounds x="432" y="99" width="36" height="36" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="440" y="142" width="20" height="14" />
-        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
         <di:waypoint x="215" y="117" />
@@ -1767,1055 +801,7 @@ export class BPMNOwlComponent extends Component {
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
     }
-
-    /**
-     * Update the hasSaveableContent state based on current diagram and field content
-     */
-    updateSaveableContentState() {
-        try {
-            let hasSaveableContent = false;
-            
-            // Check if there's a loaded diagram with content
-            if (this.viewer && this.state.loaded) {
-                hasSaveableContent = true;
-            }
-            // For new records, always allow saving (we'll provide default content if needed)
-            else if (this.detectRecordId() === null || this.detectRecordId() === 'new') {
-                hasSaveableContent = true;
-                console.log('BPMNOwlComponent: New record detected - enabling save functionality');
-            }
-            // Check if there's XML content in the field
-            else {
-                const fieldValue = this.getDatabaseFieldValue();
-                if (fieldValue && fieldValue.trim().length > 0) {
-                    // Check if it looks like valid XML
-                    if (fieldValue.includes('<bpmn:') || fieldValue.includes('<?xml')) {
-                        hasSaveableContent = true;
-                    }
-                }
-            }
-            
-            // Check if there's a diagram that can be exported
-            if (!hasSaveableContent && this.viewer) {
-                try {
-                    // Try to get XML from viewer (async operation, so we'll handle this separately)
-                    this.viewer.saveXML({ format: true }).then((result) => {
-                        if (result && result.xml && result.xml.trim().length > 0) {
-                            // Only update if it looks like a real diagram (not just empty template)
-                            if (result.xml.includes('bpmn:process') || result.xml.includes('bpmn:definitions')) {
-                                this.state.hasSaveableContent = true;
-                            }
-                        }
-                    }).catch(() => {
-                        // Ignore errors in this check
-                    });
-                } catch (error) {
-                    // Ignore errors in this check
-                }
-            }
-            
-            // Update state
-            this.state.hasSaveableContent = hasSaveableContent;
-            
-            console.log('BPMNOwlComponent: Saveable content state updated:', hasSaveableContent);
-            
-        } catch (error) {
-            console.error('BPMNOwlComponent: Error updating saveable content state:', error);
-            // For new records, default to true to allow saving
-            if (this.detectRecordId() === null || this.detectRecordId() === 'new') {
-                this.state.hasSaveableContent = true;
-            } else {
-                this.state.hasSaveableContent = false;
-            }
-        }
-    }
-
-    /**
-     * Create and load a default BPMN diagram for new records
-     */
-    async createDefaultDiagram() {
-        console.log('BPMNOwlComponent: Creating default diagram for new record');
-        
-        try {
-            const defaultXML = this.getDefaultBPMNXML();
-            
-            // Update the XML field with default content first
-            this.updateXMLField(defaultXML);
-            
-            // Now load the diagram using the same pattern as loadDiagramFromDatabase
-            this.state.loading = true;
-            this.state.error = false;
-            this.state.message = "📝 Creating default BPMN diagram...";
-            
-            // Check if BPMN.js Modeler is available
-            if (typeof window.BpmnJS === 'undefined') {
-                throw new Error('BPMN.js Modeler library not loaded. Please refresh the page.');
-            }
-            
-            // Clean up existing modeler if any
-            if (this.viewer) {
-                for (const [eventName, handler] of this.eventListeners) {
-                    this.viewer.off(eventName, handler);
-                }
-                this.eventListeners.clear();
-                this.viewer.destroy();
-                this.viewer = null;
-            }
-            
-            // Create new modeler (with editing capabilities)
-            this.viewer = new window.BpmnJS({
-                container: this.containerRef.el,
-                keyboard: {
-                    bindTo: window
-                }
-            });
-            
-            // Setup event bridge
-            this.setupEventBridge();
-            
-            // Import the default XML
-            const result = await this.viewer.importXML(defaultXML);
-            
-            if (result.warnings && result.warnings.length > 0) {
-                console.warn('BPMNOwlComponent: Default diagram import warnings:', result.warnings);
-            }
-            
-            // Success state
-            this.state.loaded = true;
-            this.state.hasSaveableContent = true;
-            this.state.loading = false;
-            this.state.error = false;
-            this.state.message = "✅ Default BPMN diagram created successfully! You can now edit and save it.";
-            this.state.lastModified = new Date().toISOString();
-            
-            // Update enhanced state
-            this.updateDiagramInfo();
-            
-            console.log('BPMNOwlComponent: Default diagram created and loaded successfully');
-            
-        } catch (error) {
-            console.error('BPMNOwlComponent: Failed to create default diagram:', error);
-            this.state.loading = false;
-            this.state.error = true;
-            this.state.message = `❌ Failed to create default diagram: ${error.message}`;
-        }
-    }
-
-    /**
-     * Start monitoring XML content changes for record navigation (Legacy method for backward compatibility)
-     * This handles cases where user navigates between records using Next/Previous
-     */
-    startXMLContentMonitoring() {
-        // Redirect to new integrated monitoring
-        console.log('BPMNOwlComponent: Redirecting to integrated monitoring...');
-        this.startDatabaseFieldMonitoring();
-    }
-
-    /**
-     * Clear the current diagram display
-     */
-    clearDiagram() {
-        console.log('BPMNOwlComponent: Clearing diagram...');
-        
-        // Don't clear if we're just switching tabs and have a preserved viewer
-        if (!this.isVisible && this.viewer && this.state.loaded) {
-            console.log('BPMNOwlComponent: Skipping clear during tab switch - viewer preserved');
-            return;
-        }
-        
-        if (this.viewer) {
-            try {
-                // Clean up existing viewer
-                for (const [eventName, handler] of this.eventListeners) {
-                    this.viewer.off(eventName, handler);
-                }
-                this.eventListeners.clear();
-                
-                this.viewer.destroy();
-                this.viewer = null;
-            } catch (error) {
-                console.warn('BPMNOwlComponent: Error clearing diagram:', error);
-            }
-        }
-        
-        // Reset state
-        this.state.loaded = false;
-        this.state.loading = false;
-        this.state.hasSaveableContent = false;
-        this.state.error = false;
-        this.state.message = "";
-        this.state.selectedElement = null;
-        this.state.elementCount = 0;
-        this.state.diagramTitle = '';
-        this.state.currentXMLContent = '';
-    }
-
-    /**
-     * Phase 1: Auto-load diagram from database if XML data is present
-     * Called automatically on component mount and when database content changes
-     */
-    async autoLoadDiagramFromDatabase() {
-        console.log('BPMNOwlComponent: Checking for auto-load from database...');
-        
-        // Check if component is destroyed
-        if (this.isDestroyed) {
-            console.log('BPMNOwlComponent: Auto-load skipped - component destroyed');
-            return;
-        }
-        
-        // Check if already loading to prevent multiple simultaneous loads
-        if (this.state.isLoading) {
-            console.log('BPMNOwlComponent: Auto-load skipped - already loading');
-            return;
-        }
-        
-        // Check database connection
-        if (!this.state.dbConnected || !this.state.recordId) {
-            console.log('BPMNOwlComponent: No database connection or record ID available');
-            return;
-        }
-        
-        // Get XML data from database field
-        const xmlContent = this.getDatabaseFieldValue();
-        
-        // Check if we already have this content loaded
-        if (xmlContent && this.state.loaded && this.state.currentXMLContent === xmlContent) {
-            console.log('BPMNOwlComponent: Diagram already loaded with current content, skipping auto-load');
-            return;
-        }
-        
-        if (xmlContent) {
-            console.log('BPMNOwlComponent: XML data found in database, checking if reload needed...');
-            console.log('BPMNOwlComponent: Record ID:', this.state.recordId, 'Content length:', xmlContent.length);
-            
-            // Only reload if content has actually changed
-            if (this.state.currentXMLContent !== xmlContent) {
-                console.log('BPMNOwlComponent: Content changed, loading diagram...');
-                
-                // Set loading flag
-                this.state.isLoading = true;
-                
-                // Update tracked content
-                this.state.currentXMLContent = xmlContent;
-                this.state.fieldValue = xmlContent;
-                
-                try {
-                    await this.loadDiagramFromDatabase();
-                    console.log('BPMNOwlComponent: Auto-load from database completed successfully');
-                } catch (error) {
-                    console.warn('BPMNOwlComponent: Auto-load from database failed:', error);
-                    // Don't show error message for auto-load failures to avoid overwhelming user
-                    // They can still manually click "Load from Database" if needed
-                } finally {
-                    // Clear loading flag
-                    this.state.isLoading = false;
-                }
-            } else {
-                console.log('BPMNOwlComponent: Content unchanged, skipping reload');
-            }
-        } else {
-            console.log('BPMNOwlComponent: No XML data found in database for auto-load');
-            // Update tracked content to empty
-            this.state.currentXMLContent = '';
-            this.state.fieldValue = '';
-        }
-    }
-
-    /**
-     * Legacy auto-load method for backward compatibility
-     */
-    async autoLoadDiagram() {
-        // Redirect to integrated approach
-        console.log('BPMNOwlComponent: Redirecting to integrated auto-load...');
-        await this.autoLoadDiagramFromDatabase();
-    }
-
-    /**
-     * Load diagram from database with enhanced error handling and validation
-     */
-    async loadDiagramFromDatabase() {
-        console.log('BPMNOwlComponent: Loading diagram from database with error boundary protection...');
-        
-        // Check circuit breaker before attempting operation
-        if (this.isCircuitBreakerOpen()) {
-            console.warn('BPMNOwlComponent: Load blocked by circuit breaker');
-            return;
-        }
-        
-        // Check if component is destroyed
-        if (this.isDestroyed) {
-            console.warn('BPMNOwlComponent: Cannot load diagram - component is destroyed');
-            return;
-        }
-        
-        // Use retry mechanism for diagram loading
-        return this.executeWithRetry(async () => {
-            return this.safeExecute(async () => {
-                // Reset all states at start
-                this.state.loading = true;
-                this.state.error = false;
-                this.state.loaded = false;
-                this.state.message = "";
-                
-                // Check database connection
-                if (!this.state.dbConnected) {
-                    throw new Error('No database connection available. Please refresh the page.');
-                }
-                
-                // Get XML content from database field using database-first approach
-                let xmlContent = this.getDatabaseFieldValue();
-                
-                // If getDatabaseFieldValue returns null, we need to make a direct API call
-                if (xmlContent === null && this.state.recordId) {
-                    console.log('BPMNOwlComponent: Making direct API call to get BPMN data...');
-                    try {
-                        // Use fetch API which is more reliable than jQuery in this context
-                        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-                        
-                        const response = await fetch('/web/dataset/call_kw', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-CSRFToken': csrfToken,
-                            },
-                            body: JSON.stringify({
-                                jsonrpc: '2.0',
-                                method: 'call',
-                                params: {
-                                    model: 'bpmn.process',
-                                    method: 'get_bpmn_xml_safe',
-                                    args: [[this.state.recordId]],
-                                    kwargs: {}
-                                },
-                                id: new Date().getTime()
-                            })
-                        });
-                        
-                        const result = await response.json();
-                        console.log('BPMNOwlComponent: API response:', result);
-                        
-                        if (result && result.result && result.result.success) {
-                            xmlContent = result.result.xml || '';
-                            console.log(`BPMNOwlComponent: API call successful, XML length: ${xmlContent.length}`);
-                        } else {
-                            const errorMsg = result?.result?.error || result?.error?.message || 'No data returned from API';
-                            console.warn('BPMNOwlComponent: API call unsuccessful:', errorMsg);
-                            xmlContent = ''; // Set to empty string to continue with fallback
-                        }
-                    } catch (apiError) {
-                        console.error('BPMNOwlComponent: API call failed:', apiError);
-                        // Fallback to empty content rather than failing completely
-                        console.log('BPMNOwlComponent: API call failed, will try DOM fallback');
-                        xmlContent = '';
-                    }
-                }
-                
-                // Validate database content - if empty, load default diagram
-                if (!xmlContent) {
-                    const recordInfo = this.state.recordId ? ` for record ${this.state.recordId}` : '';
-                    console.log(`BPMNOwlComponent: No BPMN XML data found in database${recordInfo}, loading default diagram`);
-                    xmlContent = this.getDefaultBPMNXML();
-                }
-
-                const recordInfo = this.state.recordId ? ` Record ID: ${this.state.recordId},` : '';
-                console.log(`BPMNOwlComponent: Database XML content loaded, length: ${xmlContent.length},${recordInfo}`);
-
-                // Validate XML format
-                if (!xmlContent.includes('bpmn:definitions') && !xmlContent.includes('<definitions')) {
-                    throw new Error('Invalid BPMN XML format detected in database. Please ensure the content is valid BPMN 2.0 XML.');
-                }
-
-                // Check if BPMN.js Modeler is available
-                if (typeof window.BpmnJS === 'undefined') {
-                    throw new Error('BPMN.js Modeler library not loaded. Please refresh the page.');
-                }
-
-                // Clean up existing modeler with comprehensive cleanup
-                if (this.viewer) {
-                    await this.safeExecute(async () => {
-                        // Perform partial cleanup for existing modeler
-                        for (const [eventName, handler] of this.eventListeners) {
-                            this.viewer.off(eventName, handler);
-                        }
-                        this.eventListeners.clear();
-                        
-                        this.viewer.destroy();
-                        this.viewer = null;
-                    }, 'modeler cleanup');
-                }
-
-                // Check again if component is destroyed during async operations
-                if (this.isDestroyed) {
-                    throw new Error('Component destroyed during load operation');
-                }
-
-                // Create new modeler with error boundary
-                this.viewer = await this.safeExecute(async () => {
-                    const modeler = new window.BpmnJS({
-                        container: this.containerRef.el,
-                        keyboard: {
-                            bindTo: window
-                        }
-                    });
-                    
-                    // Track any canvas contexts created by BPMN.js (defensive approach)
-                    try {
-                        const canvas = modeler.get('canvas');
-                        if (canvas) {
-                            // Try different ways to access canvas context safely
-                            let canvasContext = null;
-                            
-                            if (canvas._svg && typeof canvas._svg.node === 'function') {
-                                canvasContext = canvas._svg.node();
-                            } else if (canvas._svg && canvas._svg.element) {
-                                canvasContext = canvas._svg.element;
-                            } else if (canvas._container) {
-                                canvasContext = canvas._container;
-                            }
-                            
-                            if (canvasContext) {
-                                this.trackCanvasContext(canvasContext);
-                                console.log('BPMNOwlComponent: Canvas context tracked successfully');
-                            }
-                        }
-                    } catch (error) {
-                        console.warn('BPMNOwlComponent: Could not track canvas context:', error);
-                    }
-                    
-                    return modeler;
-                }, 'modeler creation');
-
-                if (!this.viewer) {
-                    throw new Error('Failed to create BPMN modeler');
-                }
-
-                // Setup event bridging with error boundary
-                await this.safeExecute(async () => {
-                    this.setupEventBridge();
-                }, 'event bridge setup');
-
-                // Import the XML from database with safety check
-                console.log('BPMNOwlComponent: Importing XML from database...');
-                
-                if (this.isDestroyed) {
-                    throw new Error('Component destroyed before import');
-                }
-                
-                const result = await this.viewer.importXML(xmlContent);
-                
-                // Final safety check after async operation
-                if (this.isDestroyed) {
-                    throw new Error('Component destroyed after import');
-                }
-                
-                if (result.warnings && result.warnings.length > 0) {
-                    console.warn('BPMNOwlComponent: Import warnings:', result.warnings);
-                }
-                
-                // Success state
-                this.state.loaded = true;
-                this.state.hasSaveableContent = true;
-                this.state.error = false;
-                this.state.message = "";
-                this.state.lastModified = new Date().toISOString();
-                this.state.lastSyncTime = new Date().toISOString();
-                
-                // Update tracked content
-                this.state.currentXMLContent = xmlContent;
-                
-                // Persist state for tab switching
-                this.persistComponentState();
-                
-                // Update enhanced state using safe animation frame
-                this.safeRequestAnimationFrame(() => {
-                    this.updateDiagramInfo();
-                });
-                
-                const finalRecordInfo = this.state.recordId ? `, Record ID: ${this.state.recordId}` : '';
-                console.log(`BPMNOwlComponent: Diagram loaded successfully from database${finalRecordInfo}`);
-                return true;
-                
-            }, 'database diagram loading');
-        }, 'loadDiagramFromDatabase').catch(error => {
-            console.error('BPMNOwlComponent: Database load failed after all retries:', error);
-            
-            // Only update state if component is not destroyed
-            if (!this.isDestroyed) {
-                this.state.error = true;
-                this.state.loaded = false;
-                
-                // Provide user-friendly error messages based on error type
-                if (error.message.includes('Circuit breaker')) {
-                    this.state.message = `⚠️ System protection active. Please wait before trying again.`;
-                } else if (error.message.includes('BPMN.js library not loaded')) {
-                    this.state.message = `❌ BPMN library not available. Please refresh the page.`;
-                } else if (error.message.includes('No database connection')) {
-                    this.state.message = `❌ Database connection lost. Please refresh the page.`;
-                } else if (error.message.includes('No BPMN XML data found in database')) {
-                    this.state.message = `❌ No BPMN XML content found in database for this record. Please add valid BPMN XML first.`;
-                } else if (error.message.includes('Invalid BPMN XML format')) {
-                    this.state.message = `❌ Invalid BPMN XML format in database. Please check the XML content.`;
-                } else {
-                    this.state.message = `❌ Database Error: ${error.message}`;
-                }
-            }
-        }).finally(() => {
-            // Only update loading state if component is not destroyed
-            if (!this.isDestroyed) {
-                this.state.loading = false;
-            }
-        });
-    }
-
-    /**
-     * Legacy load method that redirects to integrated approach
-     */
-    async loadDiagram() {
-        console.log('BPMNOwlComponent: Redirecting to integrated load...');
-        return this.loadDiagramFromDatabase();
-    }
-
-    setupEventBridge() {
-        if (!this.viewer || this.isDestroyed) return;
-        
-        console.log('BPMNOwlComponent: Setting up event bridge with memory management...');
-        
-        // Helper function to safely add event listeners with tracking
-        const addTrackedListener = (eventName, handler) => {
-            if (this.isDestroyed) return;
-            
-            // Wrap handler to check if component is destroyed
-            const wrappedHandler = (...args) => {
-                if (!this.isDestroyed) {
-                    try {
-                        handler(...args);
-                    } catch (error) {
-                        console.error(`BPMNOwlComponent: Error in ${eventName} handler:`, error);
-                    }
-                }
-            };
-            
-            this.viewer.on(eventName, wrappedHandler);
-            this.eventListeners.set(eventName, wrappedHandler);
-            console.log('BPMNOwlComponent: Added tracked listener:', eventName);
-        };
-        
-        // Element selection events with memory management
-        addTrackedListener('element.click', (event) => {
-            if (event.element && event.element.id) {
-                this.state.selectedElement = event.element.id;
-                console.log('BPMNOwlComponent: Element selected:', event.element.id);
-            }
-        });
-        
-        // Clear selection when clicking canvas with memory management
-        addTrackedListener('canvas.click', (event) => {
-            // Only clear if we clicked on the canvas itself, not an element
-            if (!event.element || event.element.type === 'bpmn:Process') {
-                this.state.selectedElement = null;
-                console.log('BPMNOwlComponent: Selection cleared');
-            }
-        });
-        
-        // Zoom/pan events with debouncing and memory management
-        let zoomUpdateTimer = null;
-        addTrackedListener('canvas.viewbox.changed', () => {
-            if (this.isDestroyed) return;
-            
-            // Clear existing timer
-            if (zoomUpdateTimer) {
-                clearTimeout(zoomUpdateTimer);
-                this.timers.delete(zoomUpdateTimer);
-            }
-            
-            // Debounce zoom updates as recommended by architecture
-            zoomUpdateTimer = setTimeout(() => {
-                if (!this.isDestroyed && this.viewer) {
-                    try {
-                        const canvas = this.viewer.get('canvas');
-                        const newZoom = Math.round(canvas.zoom() * 100) / 100;
-                        if (this.state.zoomLevel !== newZoom) {
-                            this.state.zoomLevel = newZoom;
-                            this.state.viewChanged = Date.now();
-                            console.log('BPMNOwlComponent: Zoom changed to:', newZoom);
-                        }
-                    } catch (error) {
-                        console.error('BPMNOwlComponent: Error updating zoom:', error);
-                    }
-                }
-                this.timers.delete(zoomUpdateTimer);
-                zoomUpdateTimer = null;
-            }, 150); // 150ms debounce as recommended
-            
-            this.timers.add(zoomUpdateTimer);
-        });
-        
-        // Import events for better loading state management with memory tracking
-        addTrackedListener('import.parse.start', () => {
-            console.log('BPMNOwlComponent: Starting XML parse...');
-        });
-        
-        addTrackedListener('import.parse.complete', () => {
-            console.log('BPMNOwlComponent: XML parse complete');
-        });
-        
-        addTrackedListener('import.render.start', () => {
-            console.log('BPMNOwlComponent: Starting diagram render...');
-        });
-        
-        addTrackedListener('import.render.complete', () => {
-            console.log('BPMNOwlComponent: Diagram render complete');
-        });
-        
-        addTrackedListener('import.done', (event) => {
-            console.log('BPMNOwlComponent: Import done event received');
-            
-            // Use animation frame for smooth UI updates
-            const frameId = requestAnimationFrame(() => {
-                if (!this.isDestroyed) {
-                    this.updateDiagramInfo();
-                }
-                this.animationFrames.delete(frameId);
-            });
-            this.animationFrames.add(frameId);
-        });
-        
-        console.log('BPMNOwlComponent: Event bridge setup completed with tracking');
-    }
-
-    updateDiagramInfo() {
-        if (!this.viewer || this.isDestroyed) return;
-        
-        try {
-            // Get element count
-            const elementRegistry = this.viewer.get('elementRegistry');
-            const elements = elementRegistry.getAll();
-            this.state.elementCount = elements.length;
-            
-            // Get current zoom level
-            const canvas = this.viewer.get('canvas');
-            this.state.zoomLevel = Math.round(canvas.zoom() * 100) / 100;
-            
-            // Try to get diagram title from definitions
-            const definitions = this.viewer.getDefinitions();
-            if (definitions && definitions.name) {
-                this.state.diagramTitle = definitions.name;
-            } else if (definitions && definitions.rootElements && definitions.rootElements[0]) {
-                this.state.diagramTitle = definitions.rootElements[0].name || 'Untitled Process';
-            } else {
-                this.state.diagramTitle = 'BPMN Diagram';
-            }
-            
-            console.log('BPMNOwlComponent: Updated diagram info:', {
-                elements: this.state.elementCount,
-                zoom: this.state.zoomLevel,
-                title: this.state.diagramTitle
-            });
-            
-        } catch (error) {
-            console.warn('BPMNOwlComponent: Could not update diagram info:', error);
-        }
-    }
-
-    // Advanced interaction methods with memory management and error boundaries
-    async zoomFit() {
-        return this.safeExecute(async () => {
-            if (!this.viewer || !this.state.loaded || this.isDestroyed) {
-                throw new Error('Viewer not ready for zoom operation');
-            }
-            
-            const canvas = this.viewer.get('canvas');
-            canvas.zoom('fit-viewport');
-            
-            // Use safe animation frame for UI updates
-            this.safeRequestAnimationFrame(() => {
-                if (this.viewer && !this.isDestroyed) {
-                    this.state.zoomLevel = Math.round(canvas.zoom() * 100) / 100;
-                    this.state.viewChanged = Date.now();
-                    console.log('BPMNOwlComponent: Zoom fit applied, new zoom:', this.state.zoomLevel);
-                }
-            });
-            
-            return true;
-        }, 'zoom fit');
-    }
-
-    async zoomIn() {
-        return this.safeExecute(async () => {
-            if (!this.viewer || !this.state.loaded || this.isDestroyed) {
-                throw new Error('Viewer not ready for zoom operation');
-            }
-            
-            const canvas = this.viewer.get('canvas');
-            const currentZoom = canvas.zoom();
-            const newZoom = Math.min(4.0, currentZoom + 0.2); // Max zoom 4x
-            canvas.zoom(newZoom);
-            
-            // Use safe animation frame for UI updates
-            this.safeRequestAnimationFrame(() => {
-                if (!this.isDestroyed) {
-                    this.state.zoomLevel = Math.round(newZoom * 100) / 100;
-                    this.state.viewChanged = Date.now();
-                    console.log('BPMNOwlComponent: Zoomed in to:', this.state.zoomLevel);
-                }
-            });
-            
-            return newZoom;
-        }, 'zoom in');
-    }
-
-    async zoomOut() {
-        return this.safeExecute(async () => {
-            if (!this.viewer || !this.state.loaded || this.isDestroyed) {
-                throw new Error('Viewer not ready for zoom operation');
-            }
-            
-            const canvas = this.viewer.get('canvas');
-            const currentZoom = canvas.zoom();
-            const newZoom = Math.max(0.1, currentZoom - 0.2); // Min zoom 0.1x
-            canvas.zoom(newZoom);
-            
-            // Use safe animation frame for UI updates
-            this.safeRequestAnimationFrame(() => {
-                if (!this.isDestroyed) {
-                    this.state.zoomLevel = Math.round(newZoom * 100) / 100;
-                    this.state.viewChanged = Date.now();
-                    console.log('BPMNOwlComponent: Zoomed out to:', this.state.zoomLevel);
-                }
-            });
-            
-            return newZoom;
-        }, 'zoom out');
-    }
-
-    clearSelection() {
-        if (!this.viewer) return;
-        
-        try {
-            const selection = this.viewer.get('selection');
-            selection.select(null);
-            this.state.selectedElement = null;
-            console.log('BPMNOwlComponent: Selection cleared programmatically');
-        } catch (error) {
-            console.error('BPMNOwlComponent: Clear selection failed:', error);
-        }
-    }
-
-    /**
-     * Simple page reload (only for edge cases)
-     */
-    reloadPage() {
-        console.log('BPMNOwlComponent: Manual page reload requested');
-        window.location.reload();
-    }
-
-    /**
-     * Save the current BPMN diagram to the database
-     */
-    async saveDiagramToDatabase() {
-        if (!this.viewer) {
-            this.state.error = 'BPMN modeler not initialized';
-            return;
-        }
-
-        try {
-            this.state.saving = true;
-            this.state.error = null;
-
-            // Get the current XML from the modeler
-            const result = await this.viewer.saveXML({ format: true });
-            const xmlContent = result.xml;
-
-            // Simply update the form field and let Odoo handle everything else
-            this.updateXMLField(xmlContent);
-            
-            // Set a simple message
-            this.state.message = "✅ Form updated! Now use Odoo's standard save (Ctrl+S or toolbar).";
-            this.state.currentXMLContent = xmlContent;
-
-        } catch (error) {
-            console.error('BPMNOwlComponent: Error updating diagram:', error);
-            this.state.error = 'Failed to update diagram: ' + error.message;
-            this.state.message = '';
-        } finally {
-            this.state.saving = false;
-        }
-    }
-    
-    /**
-     * Update the XML field in the form
-     */
-    updateXMLField(xmlContent) {
-        const xmlField = document.querySelector('textarea[name="bpmn_xml"]') ||
-                        document.querySelector('textarea[id*="bpmn_xml"]') ||
-                        document.querySelector('.o_field_text[data-field-name="bpmn_xml"]');
-        
-        if (xmlField) {
-            xmlField.value = xmlContent;
-            xmlField.dispatchEvent(new Event('input', { bubbles: true }));
-            xmlField.dispatchEvent(new Event('change', { bubbles: true }));
-            console.log('BPMNOwlComponent: XML field updated');
-        }
-        
-        // Update saveable content state after field update
-        this.updateSaveableContentState();
-    }
-
-    /**
-     * Delete the current BPMN process record from database
-     */
-    async deleteDiagram() {
-        console.log('BPMNOwlComponent: Delete diagram requested');
-        
-        // Get current record ID
-        const recordId = this.detectRecordId();
-        if (!recordId) {
-            console.warn('BPMNOwlComponent: Cannot delete - no record ID detected');
-            alert('Cannot delete: No record found. You might be creating a new record.');
-            return;
-        }
-        
-        // Show confirmation dialog with record information
-        if (!confirm(`Are you sure you want to permanently delete this BPMN process (ID: ${recordId})?\n\nThis action cannot be undone and will remove the entire record from the database.`)) {
-            console.log('BPMNOwlComponent: Delete cancelled by user');
-            return;
-        }
-        
-        try {
-            console.log(`BPMNOwlComponent: Deleting record ID ${recordId} from database`);
-            
-            // Show deleting status
-            this.state.message = "🗑️ Deleting record from database...";
-            this.state.error = false;
-            
-            // Get CSRF token from meta tag or cookie
-            const getCsrfToken = () => {
-                const meta = document.querySelector('meta[name="csrf-token"]');
-                if (meta) return meta.getAttribute('content');
-                
-                const cookies = document.cookie.split(';');
-                for (let cookie of cookies) {
-                    const [name, value] = cookie.trim().split('=');
-                    if (name === 'csrf_token') return value;
-                }
-                return null;
-            };
-            
-            // Call Odoo RPC to delete the record using fetch API
-            const csrfToken = getCsrfToken();
-            const headers = {
-                'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-            };
-            
-            if (csrfToken) {
-                headers['X-CSRFToken'] = csrfToken;
-            }
-            
-            const result = await fetch('/web/dataset/call_kw/bpmn.process/unlink', {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify({
-                    jsonrpc: '2.0',
-                    method: 'call',
-                    params: {
-                        model: 'bpmn.process',
-                        method: 'unlink',
-                        args: [[parseInt(recordId)]],
-                        kwargs: {}
-                    },
-                    id: Date.now()
-                })
-            });
-            
-            if (!result.ok) {
-                throw new Error(`HTTP error! status: ${result.status}`);
-            }
-            
-            const jsonResult = await result.json();
-            if (jsonResult.error) {
-                throw new Error(jsonResult.error.data?.message || 'RPC call failed');
-            }
-            
-            console.log('BPMNOwlComponent: Record successfully deleted from database:', jsonResult.result);
-            
-            // Clear the diagram viewer
-            this.clearDiagram();
-            
-            // Update component state
-            this.state.loaded = false;
-            this.state.selectedElement = null;
-            this.state.elementCount = 0;
-            this.state.diagramTitle = '';
-            this.state.currentXMLContent = '';
-            this.state.fieldValue = '';
-            this.state.recordId = null;
-            this.state.dbConnected = false;
-            this.state.message = "✅ Record deleted successfully. Redirecting...";
-            this.state.error = false;
-            
-            // Navigate away from the deleted record
-            setTimeout(() => {
-                // Navigate to the list view
-                window.location.href = '/web#action=bpmn.action_bpmn_process&model=bpmn.process&view_type=list';
-            }, 1500);
-            
-        } catch (error) {
-            console.error('BPMNOwlComponent: Delete record failed:', error);
-            this.state.error = true;
-            this.state.message = `❌ Failed to delete record: ${error.message || 'Unknown error'}`;
-            
-            // Provide helpful error information
-            if (error.message && error.message.includes('Access')) {
-                this.state.message += ' (Check user permissions)';
-            }
-        }
-    }
-
-    // Pan controls
-    panUp() {
-        if (!this.viewer || !this.state.loaded) return;
-        
-        try {
-            const canvas = this.viewer.get('canvas');
-            const viewbox = canvas.viewbox();
-            canvas.viewbox({
-                x: viewbox.x,
-                y: viewbox.y - 50, // Move up by 50 units
-                width: viewbox.width,
-                height: viewbox.height
-            });
-            this.state.viewChanged = Date.now();
-            console.log('BPMNOwlComponent: Panned up');
-        } catch (error) {
-            console.error('BPMNOwlComponent: Pan up failed:', error);
-        }
-    }
-
-    panDown() {
-        if (!this.viewer || !this.state.loaded) return;
-        
-        try {
-            const canvas = this.viewer.get('canvas');
-            const viewbox = canvas.viewbox();
-            canvas.viewbox({
-                x: viewbox.x,
-                y: viewbox.y + 50, // Move down by 50 units
-                width: viewbox.width,
-                height: viewbox.height
-            });
-            this.state.viewChanged = Date.now();
-            console.log('BPMNOwlComponent: Panned down');
-        } catch (error) {
-            console.error('BPMNOwlComponent: Pan down failed:', error);
-        }
-    }
-
-    panLeft() {
-        if (!this.viewer || !this.state.loaded) return;
-        
-        try {
-            const canvas = this.viewer.get('canvas');
-            const viewbox = canvas.viewbox();
-            canvas.viewbox({
-                x: viewbox.x - 50, // Move left by 50 units
-                y: viewbox.y,
-                width: viewbox.width,
-                height: viewbox.height
-            });
-            this.state.viewChanged = Date.now();
-            console.log('BPMNOwlComponent: Panned left');
-        } catch (error) {
-            console.error('BPMNOwlComponent: Pan left failed:', error);
-        }
-    }
-
-    panRight() {
-        if (!this.viewer || !this.state.loaded) return;
-        
-        try {
-            const canvas = this.viewer.get('canvas');
-            const viewbox = canvas.viewbox();
-            canvas.viewbox({
-                x: viewbox.x + 50, // Move right by 50 units
-                y: viewbox.y,
-                width: viewbox.width,
-                height: viewbox.height
-            });
-            this.state.viewChanged = Date.now();
-            console.log('BPMNOwlComponent: Panned right');
-        } catch (error) {
-            console.error('BPMNOwlComponent: Pan right failed:', error);
-        }
-    }
-
-    getElementInfo(elementId) {
-        if (!this.viewer || !elementId) return null;
-        
-        try {
-            const elementRegistry = this.viewer.get('elementRegistry');
-            const element = elementRegistry.get(elementId);
-            
-            if (element) {
-                return {
-                    id: element.id,
-                    type: element.type,
-                    name: element.businessObject?.name || element.id,
-                    x: element.x || 0,
-                    y: element.y || 0,
-                    width: element.width || 0,
-                    height: element.height || 0
-                };
-            }
-        } catch (error) {
-            console.error('BPMNOwlComponent: Get element info failed:', error);
-        }
-        
-        return null;
-    }
-
-    selectElement(elementId) {
-        if (!this.viewer || !elementId) return;
-        
-        try {
-            const selection = this.viewer.get('selection');
-            const elementRegistry = this.viewer.get('elementRegistry');
-            const element = elementRegistry.get(elementId);
-            
-            if (element) {
-                selection.select(element);
-                this.state.selectedElement = elementId;
-                console.log('BPMNOwlComponent: Element selected programmatically:', elementId);
-            }
-        } catch (error) {
-            console.error('BPMNOwlComponent: Select element failed:', error);
-        }
-    }
-
-    /**
-     * Manual circuit breaker reset for user control
-     */
-    manualResetCircuitBreaker() {
-        console.log('BPMNOwlComponent: Manual circuit breaker reset requested');
-        
-        // Force reset circuit breaker
-        this.resetCircuitBreaker();
-        
-        // Show confirmation message
-        if (!this.isDestroyed) {
-            this.state.message = '🔄 Error protection manually reset. You can try loading the diagram again.';
-            
-            // Clear message after delay
-            this.safeSetTimeout(() => {
-                if (!this.isDestroyed && this.state.message.includes('manually reset')) {
-                    this.state.message = '';
-                }
-            }, 3000);
-        }
-    }
 }
 
-// Register component in Odoo's component registry
+// Register the component in the components registry for OWL mounting
 webRegistry.category("components").add("BPMNOwlComponent", BPMNOwlComponent);
-
-console.log('BPMNOwlComponent: Registered with Odoo component registry');
